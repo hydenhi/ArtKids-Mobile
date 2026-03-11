@@ -1,7 +1,6 @@
-import React, { useRef } from 'react';
-import { View, StyleSheet, Alert, SafeAreaView, TouchableOpacity, Text } from 'react-native';
-import { WebView, WebViewNavigation } from 'react-native-webview';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useRef } from "react";
+import { View, StyleSheet, Alert } from "react-native";
+import { WebView, WebViewNavigation } from "react-native-webview";
 
 export default function PaymentWebviewScreen({ route, navigation }: any) {
   // Nhận paymentUrl được truyền sang từ màn hình Giỏ hàng (CartScreen)
@@ -15,43 +14,34 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
 
     // KIỂM TRA ĐƯỜNG DẪN TRẢ VỀ TỪ VNPAY
     // Thực tế: Thay bằng domain backend của bạn (vd: your-api.com/vnpay-return)
-    if (url.includes('vnpay-return') || url.includes('mock=123')) {
-      
+    if (url.includes("vnpay-return") || url.includes("mock=123")) {
       // Giả lập check mã thành công (Thực tế VNPAY trả về vnp_ResponseCode=00 là thành công)
-      const isSuccess = url.includes('vnp_ResponseCode=00') || url.includes('mock=123');
+      const isSuccess =
+        url.includes("vnp_ResponseCode=00") || url.includes("mock=123");
 
       if (isSuccess) {
         Alert.alert(
-          'Thanh toán thành công! 🎉', 
-          'Khóa học đã được thêm vào Bàn học của bé.',
+          "Thanh toán thành công! 🎉",
+          "Khóa học đã được thêm vào Bàn học của bé.",
           [
-            { 
-              text: 'Tuyệt vời', 
+            {
+              text: "Tuyệt vời",
               onPress: () => {
                 // Đóng Webview và quay về trang chủ hoặc trang Khóa học của tôi
-                navigation.navigate('MainTabs', { screen: 'MyCoursesTab' });
-              } 
-            }
-          ]
+                navigation.navigate("DrawerMain", { screen: "MyCourses" });
+              },
+            },
+          ],
         );
       } else {
-        Alert.alert('Thất bại', 'Giao dịch đã bị hủy hoặc xảy ra lỗi.');
+        Alert.alert("Thất bại", "Giao dịch đã bị hủy hoặc xảy ra lỗi.");
         navigation.goBack(); // Quay lại giỏ hàng
       }
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Thanh Header Custom (Vì Webview chiếm toàn màn hình, nên có nút Back để phụ huynh hủy giao dịch) */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="close" size={28} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Thanh toán An toàn</Text>
-        <View style={{ width: 28 }} /> {/* Spacer để cân bằng layout */}
-      </View>
-
+    <View style={styles.container}>
       {/* Trình duyệt nhúng */}
       <WebView
         ref={webviewRef}
@@ -60,30 +50,30 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
         startInLoadingState={true}
         style={{ flex: 1 }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: "#FFF",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 15,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
+    borderBottomColor: "#EEE",
   },
   backBtn: {
     padding: 5,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2D3436',
-  }
+    fontWeight: "bold",
+    color: "#2D3436",
+  },
 });
