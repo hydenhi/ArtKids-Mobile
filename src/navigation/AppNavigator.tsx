@@ -11,6 +11,9 @@ import CartScreen from "../screens/Parent/CartScreen";
 import PaymentWebviewScreen from "../screens/Parent/PaymentWebviewScreen";
 import LearningScreen from "../screens/Kids/LearningScreen";
 import EditProfileScreen from "../screens/Kids/EditProfileScreen";
+import AllCoursesScreen from "../screens/Kids/AllCoursesScreen";
+import AllCombosScreen from "../screens/Kids/AllCombosScreen";
+import ComboDetailScreen from "../screens/Kids/ComboDetailScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -36,6 +39,9 @@ export default function AppNavigator() {
           />
           <Stack.Screen name="Learning" component={LearningScreen} />
           <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+          <Stack.Screen name="AllCourses" component={AllCoursesScreen} />
+          <Stack.Screen name="AllCombos" component={AllCombosScreen} />
+          <Stack.Screen name="ComboDetail" component={ComboDetailScreen} />
         </>
       )}
     </Stack.Navigator>

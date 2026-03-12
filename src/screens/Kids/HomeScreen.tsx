@@ -64,10 +64,15 @@ export default function HomeScreen({ navigation }: any) {
       style={styles.card}
       // TRUYỀN CẢ _id VÀ slug SANG TRANG CHI TIẾT
       onPress={() =>
-        navigation.navigate("CourseDetail", {
-          courseId: item._id || item.id,
-          slug: item.slug,
-        })
+        isCombo
+          ? navigation.navigate("ComboDetail", {
+              comboId: item._id || item.id,
+              slug: item.slug,
+            })
+          : navigation.navigate("CourseDetail", {
+              courseId: item._id || item.id,
+              slug: item.slug,
+            })
       }
     >
       <Image
@@ -193,7 +198,9 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Khóa học mới</Text>
-                <Text style={styles.seeAllText}>Xem tất cả</Text>
+                <TouchableOpacity onPress={() => navigation.navigate("AllCourses")}>
+                  <Text style={styles.seeAllText}>Xem tất cả</Text>
+                </TouchableOpacity>
               </View>
               <FlatList
                 horizontal
@@ -213,7 +220,9 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Combo phổ biến</Text>
-                <Text style={styles.seeAllText}>Xem tất cả</Text>
+                <TouchableOpacity onPress={() => navigation.navigate("AllCombos")}>
+                  <Text style={styles.seeAllText}>Xem tất cả</Text>
+                </TouchableOpacity>
               </View>
               <FlatList
                 horizontal
