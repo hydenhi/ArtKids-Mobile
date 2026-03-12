@@ -427,10 +427,11 @@ export default function CourseDetailScreen({ route, navigation }: any) {
           }
         >
           <Text style={styles.buyButtonText}>
-            {isEnrolled ? "Vào học ngay 🚀" : "Mua Khóa Học"}
+            {isEnrolled ? "Vào học ngay " : "Mua Khóa Học"}
           </Text>
         </TouchableOpacity>
         {!isEnrolled && (
+          // Đã sửa lại logic nút này: Bấm vào gọi handleToggleCart để Thêm/Xóa
           <TouchableOpacity
             style={[
               styles.cartIconButton,
