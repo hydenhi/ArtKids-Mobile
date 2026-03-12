@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
 interface ShopState {
   cart: any[];
@@ -19,13 +19,13 @@ export const useShopStore = create<ShopState>((set, get) => ({
   addToCart: (course) => {
     const cart = get().cart;
     // Kiểm tra xem khóa học đã có trong giỏ chưa (dựa vào _id)
-    if (!cart.find(item => item._id === course._id)) {
+    if (!cart.find((item) => item._id === course._id)) {
       set({ cart: [...cart, course] });
     }
   },
 
   removeFromCart: (courseId) => {
-    set({ cart: get().cart.filter(item => item._id !== courseId) });
+    set({ cart: get().cart.filter((item) => item._id !== courseId) });
   },
 
   clearCart: () => set({ cart: [] }),
@@ -33,10 +33,10 @@ export const useShopStore = create<ShopState>((set, get) => ({
   // --- CÁC HÀM XỬ LÝ YÊU THÍCH (WISHLIST) ---
   toggleWishlist: (course) => {
     const wishlist = get().wishlist;
-    const exists = wishlist.find(item => item._id === course._id);
+    const exists = wishlist.find((item) => item._id === course._id);
     if (exists) {
       // Nếu đã thả tim rồi thì bỏ tim (xóa khỏi mảng)
-      set({ wishlist: wishlist.filter(item => item._id !== course._id) });
+      set({ wishlist: wishlist.filter((item) => item._id !== course._id) });
     } else {
       // Nếu chưa thả tim thì thêm vào mảng
       set({ wishlist: [...wishlist, course] });
@@ -45,10 +45,10 @@ export const useShopStore = create<ShopState>((set, get) => ({
 
   // --- CÁC HÀM KIỂM TRA TRẠNG THÁI ---
   isInWishlist: (courseId) => {
-    return !!get().wishlist.find(item => item._id === courseId);
+    return !!get().wishlist.find((item) => item._id === courseId);
   },
 
   isInCart: (courseId) => {
-    return !!get().cart.find(item => item._id === courseId);
-  }
+    return !!get().cart.find((item) => item._id === courseId);
+  },
 }));

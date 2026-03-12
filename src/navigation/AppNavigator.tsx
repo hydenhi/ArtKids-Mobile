@@ -1,16 +1,10 @@
-import React from 'react';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useAuthStore } from '../store/useAuthStore';
+import React from "react";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { useAuthStore } from "../store/useAuthStore";
 
-// Import các màn hình
-import MainTabNavigator from './MainTabNavigator';
-import LoginScreen from '../screens/Auth/LoginScreen';
-import RegisterScreen from '../screens/Auth/RegisterScreen';
-import CourseDetailScreen from '../screens/Kids/CourseDetailScreen';
-import CartScreen from '../screens/Parent/CartScreen';
-import PaymentWebviewScreen from '../screens/Parent/PaymentWebviewScreen';
-import LearningScreen from '../screens/Kids/LearningScreen';
-import EditProfileScreen from '../screens/Kids/EditProfileScreen';
+import LoginScreen from "../screens/Auth/LoginScreen";
+import RegisterScreen from "../screens/Auth/RegisterScreen";
+import DrawerNavigator from "./DrawerNavigator";
 
 const Stack = createNativeStackNavigator();
 
@@ -25,15 +19,7 @@ export default function AppNavigator() {
           <Stack.Screen name="Register" component={RegisterScreen} />
         </>
       ) : (
-        <>
-          <Stack.Screen name="MainTabs" component={MainTabNavigator} />
-          <Stack.Screen name="CourseDetail" component={CourseDetailScreen} />
-          <Stack.Screen name="Cart" component={CartScreen} />
-          <Stack.Screen name="PaymentWebview" component={PaymentWebviewScreen} />
-          <Stack.Screen name="Learning" component={LearningScreen} />
-          <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: false }} 
-/>
-        </>
+        <Stack.Screen name="DrawerMain" component={DrawerNavigator} />
       )}
     </Stack.Navigator>
   );
