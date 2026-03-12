@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+// IMPORT useSafeAreaInsets THAY VÌ SafeAreaView
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 import { useAuthStore } from "../../store/useAuthStore";
@@ -15,41 +17,28 @@ import { useAuthStore } from "../../store/useAuthStore";
 export default function ProfileScreen({ navigation }: any) {
   const [profile, setProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Lấy hàm logout từ Zustand
   const logout = useAuthStore((state) => state.logout);
+
+  // Dùng hook này để lấy chiều cao chính xác của Status Bar
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         setIsLoading(true);
-        console.log("⏳ Đang gọi API lấy Profile...");
-
         const response = await axiosClient.get("/auth/me");
-
-        // ĐOẠN NÀY SẼ IN RÕ RÀNG DỮ LIỆU HOẶC LỖI RA TERMINAL
-        console.log(
-          "🔍 Dữ liệu Profile trả về:\n",
-          JSON.stringify(response.data, null, 2),
-        );
-
         const userData = response.data?.data?.user;
         setProfile(userData);
       } catch (error: any) {
-        console.log("❌ Lỗi tải Profile:", error.message);
-        if (error.response) {
-          console.log("Chi tiết lỗi từ Backend:", error.response.data);
-        }
+        console.log("Lỗi tải Profile:", error.message);
       } finally {
         setIsLoading(false);
       }
     };
 
-    // Mỗi lần vào tab Profile là tự động gọi lại để cập nhật tên mới nhất (nếu có sửa)
     const unsubscribe = navigation.addListener("focus", () => {
       fetchProfile();
     });
-
     return unsubscribe;
   }, [navigation]);
 
@@ -59,21 +48,14 @@ export default function ProfileScreen({ navigation }: any) {
       "Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng không?",
       [
         { text: "Hủy", style: "cancel" },
-        {
-          text: "Đăng xuất",
-          style: "destructive",
-          onPress: () => {
-            // Xóa token trong bộ nhớ và đẩy ra màn hình Login
-            logout();
-          },
-        },
+        { text: "Đăng xuất", style: "destructive", onPress: () => logout() },
       ],
     );
   };
 
   if (isLoading) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={[styles.centerContainer, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color="#0984E3" />
         <Text style={styles.loadingText}>Đang tải hồ sơ...</Text>
       </View>
@@ -81,7 +63,8 @@ export default function ProfileScreen({ navigation }: any) {
   }
 
   return (
-    <View style={styles.container}>
+    // Thay SafeAreaView bằng View và cộng thêm insets.top vào paddingTop
+    <View style={[styles.container, { paddingTop: insets.top + 10 }]}>
       {/* THÔNG TIN NGƯỜI DÙNG */}
       <View style={styles.profileCard}>
         <Image
@@ -93,7 +76,6 @@ export default function ProfileScreen({ navigation }: any) {
           style={styles.avatar}
         />
         <View style={styles.infoBox}>
-          {/* Lấy đúng Tên thật và Username từ Backend */}
           <Text style={styles.fullname}>
             {profile?.fullname || profile?.name || "Phụ huynh ArtKids"}
           </Text>
@@ -112,7 +94,6 @@ export default function ProfileScreen({ navigation }: any) {
 
       {/* DANH SÁCH MENU CÀI ĐẶT */}
       <View style={styles.menuContainer}>
-        {/* SỬA LẠI NÚT NÀY ĐỂ CHUYỂN TRANG */}
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() =>
@@ -165,9 +146,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FDFBF7",
   },
   loadingText: { marginTop: 10, color: "#78909C", fontSize: 16 },
-  header: { padding: 20, paddingTop: 10, alignItems: "center" },
-  headerTitle: { fontSize: 24, fontWeight: "900", color: "#37474F" },
-
   profileCard: {
     flexDirection: "row",
     backgroundColor: "#FFF",
@@ -204,7 +182,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   menuContainer: {
     backgroundColor: "#FFF",
     marginHorizontal: 20,
@@ -234,7 +211,6 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   menuText: { flex: 1, fontSize: 16, color: "#2D3436", fontWeight: "500" },
-
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",

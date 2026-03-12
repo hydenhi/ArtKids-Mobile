@@ -11,12 +11,10 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DrawerActions } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/useAuthStore";
 import axiosClient from "../../api/axiosClient";
 
-// Dữ liệu tĩnh cho danh mục
 const STATIC_CATEGORIES = [
   { id: "1", title: "Drawing", icon: "pencil", color: "#E8F5E9" },
   { id: "2", title: "Paint", icon: "color-palette", color: "#FFF9C4" },
@@ -25,44 +23,34 @@ const STATIC_CATEGORIES = [
 
 export default function HomeScreen({ navigation }: any) {
   const user = useAuthStore((state) => state.user);
-
   const [courses, setCourses] = useState<any[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // GỌI API KHI MỞ MÀN HÌNH
   useEffect(() => {
     const fetchHomeData = async () => {
       try {
         setLoading(true);
-
         const [courseRes, comboRes] = await Promise.all([
           axiosClient.get("/courses"),
           axiosClient.get("/combos"),
         ]);
-
-        // CẬP NHẬT LẠI CÁCH LẤY DỮ LIỆU CHUẨN VỚI BACKEND
-        // Lấy từ biến .courses và .combos bên trong data
         const coursesData = courseRes.data?.courses || courseRes.data || [];
         const combosData = comboRes.data?.combos || comboRes.data || [];
-
         setCourses(coursesData);
         setCombos(combosData);
       } catch (error: any) {
-        console.log("❌ Lỗi kết nối Backend: ", error.message);
+        console.log("Lỗi kết nối Backend: ", error.message);
       } finally {
         setLoading(false);
       }
     };
-
     fetchHomeData();
   }, []);
 
-  // Component Thẻ Khóa học nhỏ gọn
   const SmallCourseCard = ({ item, isCombo = false }: any) => (
     <TouchableOpacity
       style={styles.card}
-      // TRUYỀN CẢ _id VÀ slug SANG TRANG CHI TIẾT
       onPress={() =>
         isCombo
           ? navigation.navigate("ComboDetail", {
@@ -106,12 +94,7 @@ export default function HomeScreen({ navigation }: any) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.userInfo}>
-          <TouchableOpacity
-            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-            style={styles.menuBtn}
-          >
-            <Ionicons name="menu" size={28} color="#546E7A" />
-          </TouchableOpacity>
+          {/* NÚT DRAWER ĐÃ BỊ XÓA Ở ĐÂY */}
           <Image
             source={{
               uri:
@@ -198,7 +181,9 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Khóa học mới</Text>
-                <TouchableOpacity onPress={() => navigation.navigate("AllCourses")}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("AllCourses")}
+                >
                   <Text style={styles.seeAllText}>Xem tất cả</Text>
                 </TouchableOpacity>
               </View>
@@ -220,7 +205,9 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Combo phổ biến</Text>
-                <TouchableOpacity onPress={() => navigation.navigate("AllCombos")}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("AllCombos")}
+                >
                   <Text style={styles.seeAllText}>Xem tất cả</Text>
                 </TouchableOpacity>
               </View>
@@ -250,7 +237,6 @@ export default function HomeScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FDFBF7" },
   scrollContent: { paddingBottom: 80 },
-
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -260,7 +246,6 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
   },
   userInfo: { flexDirection: "row", alignItems: "center" },
-  menuBtn: { marginRight: 8, padding: 2 },
   avatar: {
     width: 40,
     height: 40,
@@ -275,7 +260,6 @@ const styles = StyleSheet.create({
     color: "#455A64",
     marginLeft: 10,
   },
-
   headerIcons: { flexDirection: "row", alignItems: "center" },
   iconBtn: {
     width: 40,
@@ -302,7 +286,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FFF",
   },
-
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -319,7 +302,6 @@ const styles = StyleSheet.create({
   },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, fontSize: 16, color: "#455A64" },
-
   bannerContainer: {
     backgroundColor: "#E0F7FA",
     marginHorizontal: 20,
@@ -355,7 +337,6 @@ const styles = StyleSheet.create({
     zIndex: 1,
     opacity: 0.9,
   },
-
   section: { marginTop: 25 },
   sectionHeader: {
     flexDirection: "row",
@@ -371,7 +352,6 @@ const styles = StyleSheet.create({
     marginLeft: 20,
   },
   seeAllText: { fontSize: 14, color: "#90A4AE", fontWeight: "600" },
-
   categoriesRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -392,7 +372,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#546E7A",
   },
-
   card: {
     backgroundColor: "#FFF",
     width: 150,

@@ -8,72 +8,44 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 
 export default function MyCoursesScreen({ navigation }: any) {
   const [myCourses, setMyCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCourseId, setLoadingCourseId] = useState<string | null>(null);
 
   const fetchMyCourses = async () => {
     try {
       setLoading(true);
       console.log("⏳ Đang lấy danh sách khóa học của bé...");
 
-      const response = await axiosClient.get("/auth/me");
+      const response = await axiosClient.get("/users/enrolled-courses");
 
-      // Lấy danh sách ID khóa học đã đăng ký
-      const userData =
-        response.data?.data?.user || response.data?.user || response.data;
-      const enrolledList = userData?.enrolledCourses || [];
+      const enrolledList = response.data?.data || [];
 
-      if (enrolledList.length > 0) {
-        console.log(
-          `🔍 Tìm thấy ${enrolledList.length} ID khóa học. Đang tải chi tiết...`,
-        );
+      const fullCourses = enrolledList.map((item: any) => ({
+        ...item.course,
+        progress: item.progress || 0,
+      }));
 
-        // Dùng Promise.all để gọi API lấy chi tiết của tất cả khóa học CÙNG MỘT LÚC
-        const coursePromises = enrolledList.map(async (item: any) => {
-          // Lấy ID khóa học (tùy Backend trả về object hay string)
-          const courseId =
-            typeof item.course === "string"
-              ? item.course
-              : item.course?._id || item;
-
-          try {
-            // Gọi API lấy thông tin chi tiết của khóa học đó
-            const detailRes = await axiosClient.get(`/courses/${courseId}`);
-            const courseData =
-              detailRes.data?.course || detailRes.data?.data || detailRes.data;
-
-            // Trả về khóa học kèm theo tiến độ học (progress)
-            return {
-              ...courseData,
-              progress: item.progress || 0,
-            };
-          } catch (err) {
-            console.log(`⚠️ Bỏ qua khóa học bị lỗi ID: ${courseId}`);
-            return null;
-          }
-        });
-
-        // Chờ tất cả API tải xong thông tin và lọc bỏ những cái bị lỗi
-        const fullCourses = (await Promise.all(coursePromises)).filter(
-          (c) => c !== null,
-        );
-
-        console.log(`✅ Đã tải xong thông tin ${fullCourses.length} khóa học!`);
-        setMyCourses(fullCourses);
-      } else {
-        // Nếu mảng rỗng thì set mảng rỗng
-        setMyCourses([]);
-      }
+      console.log(`Đã tải xong thông tin ${fullCourses.length} khóa học!`);
+      setMyCourses(fullCourses);
     } catch (error: any) {
-      console.log("❌ Lỗi tải Bàn học:", error.message);
+      console.log("Lỗi tải Bàn học:", error.response?.status, error.message);
     } finally {
       setLoading(false);
     }
   };
+  const handleContinueLearning = (courseId: string, slug: string) => {
+    navigation.navigate("CourseDetail", {
+      courseId: courseId,
+      slug: slug,
+    });
+  };
+
   // CỰC KỲ QUAN TRỌNG: Dùng 'focus' để mỗi lần bấm vào Tab Bàn Học nó đều gọi lại API để làm mới dữ liệu
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
@@ -84,23 +56,21 @@ export default function MyCoursesScreen({ navigation }: any) {
   }, [navigation]);
 
   const renderCourseItem = ({ item }: { item: any }) => {
-    // Nếu Backend trả về chỉ ID (string) thay vì object khóa học thì ta xử lý phòng hờ,
-    // nhưng thông thường backend sẽ populate (điền đầy đủ thông tin khóa học vào)
-    const courseId = item._id || item.course?._id || item;
-    const title = item.title || item.course?.title || "Khóa học nghệ thuật";
+    const courseId = item._id;
+    const title = item.title || "Khóa học nghệ thuật";
     const thumbnail =
-      item.thumbnail ||
-      item.course?.thumbnail ||
-      "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400";
+      item.thumbnail &&
+      !item.thumbnail.startsWith("data:") &&
+      !item.thumbnail.includes("youtube")
+        ? item.thumbnail
+        : "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400";
+    const progress = item.progress || 0;
 
     return (
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.9}
-        // Truyền thẳng courseId sang trang Chi tiết để bé vào học
-        onPress={() =>
-          navigation.navigate("CourseDetail", { courseId: courseId })
-        }
+        onPress={() => handleContinueLearning(courseId, item.slug)}
       >
         <Image source={{ uri: thumbnail }} style={styles.thumbnail} />
 
@@ -108,21 +78,24 @@ export default function MyCoursesScreen({ navigation }: any) {
           <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
-
+          {/* 
           <View style={styles.progressRow}>
             <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: "0%" }]} />
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${progress}%` as any },
+                ]}
+              />
             </View>
-            <Text style={styles.progressText}>0%</Text>
-          </View>
+            <Text style={styles.progressText}>{progress}%</Text>
+          </View> */}
 
           <TouchableOpacity
             style={styles.studyButton}
-            onPress={() =>
-              navigation.navigate("CourseDetail", { courseId: courseId })
-            }
+            onPress={() => handleContinueLearning(courseId, item.slug)}
           >
-            <Text style={styles.studyButtonText}>Tiếp tục học 🚀</Text>
+            <Text style={styles.studyButtonText}>Tiếp tục học</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -130,7 +103,7 @@ export default function MyCoursesScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#00B894" />
@@ -141,9 +114,7 @@ export default function MyCoursesScreen({ navigation }: any) {
       ) : (
         <FlatList
           data={myCourses}
-          keyExtractor={(item, index) =>
-            item._id || item.course?._id || index.toString()
-          }
+          keyExtractor={(item, index) => item._id || index.toString()}
           renderItem={renderCourseItem}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
@@ -170,7 +141,7 @@ export default function MyCoursesScreen({ navigation }: any) {
           }
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
