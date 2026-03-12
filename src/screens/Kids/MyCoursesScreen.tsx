@@ -31,10 +31,10 @@ export default function MyCoursesScreen({ navigation }: any) {
         progress: item.progress || 0,
       }));
 
-      console.log(`✅ Đã tải xong thông tin ${fullCourses.length} khóa học!`);
+      console.log(`Đã tải xong thông tin ${fullCourses.length} khóa học!`);
       setMyCourses(fullCourses);
     } catch (error: any) {
-      console.log("❌ Lỗi tải Bàn học:", error.response?.status, error.message);
+      console.log("Lỗi tải Bàn học:", error.response?.status, error.message);
     } finally {
       setLoading(false);
     }
@@ -95,7 +95,7 @@ export default function MyCoursesScreen({ navigation }: any) {
             style={styles.studyButton}
             onPress={() => handleContinueLearning(courseId, item.slug)}
           >
-            <Text style={styles.studyButtonText}>Tiếp tục học 🚀</Text>
+            <Text style={styles.studyButtonText}>Tiếp tục học</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>

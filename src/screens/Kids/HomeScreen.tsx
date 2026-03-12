@@ -40,7 +40,7 @@ export default function HomeScreen({ navigation }: any) {
         setCourses(coursesData);
         setCombos(combosData);
       } catch (error: any) {
-        console.log("❌ Lỗi kết nối Backend: ", error.message);
+        console.log("Lỗi kết nối Backend: ", error.message);
       } finally {
         setLoading(false);
       }

@@ -36,7 +36,7 @@ export default function EditProfileScreen({ route, navigation }: any) {
       });
 
       Alert.alert(
-        "Thành công! 🎉",
+        "Thành công!",
         "Thông tin cá nhân của bạn đã được cập nhật.",
         [{ text: "Tuyệt vời", onPress: () => navigation.goBack() }],
       );

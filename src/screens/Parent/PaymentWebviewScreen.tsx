@@ -21,7 +21,7 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
 
       if (isSuccess) {
         Alert.alert(
-          "Thanh toán thành công! 🎉",
+          "Thanh toán thành công!",
           "Khóa học đã được thêm vào Bàn học của bé.",
           [
             {

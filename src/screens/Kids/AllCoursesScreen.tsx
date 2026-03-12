@@ -50,7 +50,7 @@ export default function AllCoursesScreen({ navigation }: any) {
         ...mappedCategories,
       ]);
     } catch (error: any) {
-      console.log("❌ Lỗi lấy danh mục: ", error.message);
+      console.log("Lỗi lấy danh mục: ", error.message);
       setCategories([{ id: "all", title: "Tất cả danh mục" }]);
     } finally {
       setLoadingCategories(false);
@@ -70,7 +70,7 @@ export default function AllCoursesScreen({ navigation }: any) {
       const data = res.data?.courses || res.data || [];
       setCourses(data);
     } catch (error: any) {
-      console.log("❌ Lỗi lấy danh sách khóa học: ", error.message);
+      console.log("Lỗi lấy danh sách khóa học: ", error.message);
     } finally {
       setLoading(false);
     }
