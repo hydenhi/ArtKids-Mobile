@@ -30,7 +30,7 @@ export default function ProfileScreen({ navigation }: any) {
         const userData = response.data?.data?.user;
         setProfile(userData);
       } catch (error: any) {
-        console.log("❌ Lỗi tải Profile:", error.message);
+        console.log("Lỗi tải Profile:", error.message);
       } finally {
         setIsLoading(false);
       }

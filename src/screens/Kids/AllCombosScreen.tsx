@@ -50,7 +50,7 @@ export default function AllCombosScreen({ navigation }: any) {
         ...mappedCategories,
       ]);
     } catch (error: any) {
-      console.log("❌ Lỗi lấy danh mục: ", error.message);
+      console.log("Lỗi lấy danh mục: ", error.message);
       setCategories([{ id: "all", title: "Tất cả danh mục" }]);
     } finally {
       setLoadingCategories(false);
@@ -70,7 +70,7 @@ export default function AllCombosScreen({ navigation }: any) {
       const data = res.data?.combos || res.data || [];
       setCombos(data);
     } catch (error: any) {
-      console.log("❌ Lỗi lấy danh sách combo: ", error.message);
+      console.log("Lỗi lấy danh sách combo: ", error.message);
     } finally {
       setLoading(false);
     }

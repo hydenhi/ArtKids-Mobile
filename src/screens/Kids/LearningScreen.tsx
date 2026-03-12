@@ -59,7 +59,7 @@ export default function LearningScreen({ route, navigation }: any) {
     if (hasNext) {
       setCurrentLesson(allLessons[currentIndex + 1]);
     } else {
-      Alert.alert("Hoàn thành! 🎉", "Tuyệt vời, bạn đã xem hết khóa học này!");
+      Alert.alert("Hoàn thành!", "Tuyệt vời, bạn đã xem hết khóa học này!");
     }
   };
 

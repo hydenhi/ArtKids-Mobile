@@ -69,7 +69,7 @@ export default function ComboDetailScreen({ route, navigation }: any) {
     if (!combo) return;
     toggleWishlist(combo);
     if (!isLiked)
-      Alert.alert("Yêu thích 💖", "Đã thêm Combo vào danh sách Yêu thích!");
+      Alert.alert("Yêu thích", "Đã thêm Combo vào danh sách Yêu thích!");
   };
 
   const handleAddToCart = () => {

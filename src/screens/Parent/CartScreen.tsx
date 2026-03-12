@@ -37,7 +37,7 @@ export default function CartScreen({ navigation }: any) {
 
   const handleApplyCoupon = () => {
     if (!coupon) return;
-    Alert.alert("Mã giảm giá", `Đã áp dụng mã ${coupon} thành công! 🎉`);
+    Alert.alert("Mã giảm giá", `Đã áp dụng mã ${coupon} thành công!`);
     setCoupon("");
   };
 
@@ -64,7 +64,7 @@ export default function CartScreen({ navigation }: any) {
               );
               clearCart();
               Alert.alert(
-                "Thanh toán thành công! 🎉",
+                "Thanh toán thành công!",
                 "Các khóa học đã được thêm vào Bàn học của bé.",
                 [{ text: "Tuyệt vời", onPress: () => navigation.popToTop() }],
               );

@@ -36,7 +36,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
   const isInWishlist = useShopStore((state) => state.isInWishlist);
   const addToCart = useShopStore((state) => state.addToCart);
-  // IMPORT THÊM HÀM XÓA KHỎI GIỎ HÀNG TỪ STORE
   const removeFromCart = useShopStore((state) => state.removeFromCart);
   const isInCart = useShopStore((state) => state.isInCart);
 
@@ -105,7 +104,7 @@ export default function CourseDetailScreen({ route, navigation }: any) {
         initialLesson: lesson,
       });
     } else {
-      showToast("Khóa học bị khóa. Bố mẹ hãy mua để bé học nhé! 🔒", "warning");
+      showToast("Khóa học bị khóa. Bố mẹ hãy mua để bé học nhé! ", "warning");
     }
   };
 
@@ -122,19 +121,17 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const handleToggleCart = () => {
     if (!course) return;
 
-    // Nếu đã mua rồi thì báo lỗi
     if (isEnrolled) {
       showToast("Bé đã có khóa học này trong bàn học rồi!", "warning");
       return;
     }
 
-    // NẾU ĐÃ CÓ TRONG GIỎ THÌ XÓA, NẾU CHƯA CÓ THÌ THÊM
     if (alreadyInCart) {
       removeFromCart(course._id);
-      showToast("Đã bỏ khóa học khỏi Giỏ hàng 🗑️", "info");
+      showToast("Đã bỏ khóa học khỏi Giỏ hàng ", "info");
     } else {
       addToCart(course);
-      showToast("Đã thêm vào Giỏ hàng! 🛒", "success");
+      showToast("Đã thêm vào Giỏ hàng! ", "success");
     }
   };
 
@@ -291,7 +288,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
-      {/* HIỂN THỊ TOAST Ở TRÊN CÙNG */}
       <CustomToast
         visible={toast.visible}
         message={toast.message}
@@ -347,8 +343,11 @@ export default function CourseDetailScreen({ route, navigation }: any) {
                 {course.averageRating || "5.0"} ({course.numOfReviews || 0})
               </Text>
             </View>
+            {/* ĐÃ CHUYỂN ĐỔI SANG VND Ở ĐÂY */}
             <Text style={styles.price}>
-              {course.price === 0 ? "Miễn phí" : `$${course.price}`}
+              {course.price === 0
+                ? "Miễn phí"
+                : `${course.price?.toLocaleString("vi-VN")} đ`}
             </Text>
           </View>
         </View>
@@ -428,11 +427,10 @@ export default function CourseDetailScreen({ route, navigation }: any) {
           }
         >
           <Text style={styles.buyButtonText}>
-            {isEnrolled ? "Vào học ngay " : "Mua Khóa Học"}
+            {isEnrolled ? "Vào học ngay 🚀" : "Mua Khóa Học"}
           </Text>
         </TouchableOpacity>
         {!isEnrolled && (
-          // Đã sửa lại logic nút này: Bấm vào gọi handleToggleCart để Thêm/Xóa
           <TouchableOpacity
             style={[
               styles.cartIconButton,
