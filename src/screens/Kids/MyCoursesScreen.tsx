@@ -8,91 +8,92 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context"; // MỚI THÊM VÀO
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 
 export default function MyCoursesScreen({ navigation }: any) {
   const [myCourses, setMyCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCourseId, setLoadingCourseId] = useState<string | null>(null);
 
   const fetchMyCourses = async () => {
     try {
       setLoading(true);
-      const response = await axiosClient.get("/auth/me");
-      const userData =
-        response.data?.data?.user || response.data?.user || response.data;
-      const enrolledList = userData?.enrolledCourses || [];
+      console.log("⏳ Đang lấy danh sách khóa học của bé...");
 
-      if (enrolledList.length > 0) {
-        const coursePromises = enrolledList.map(async (item: any) => {
-          const courseId =
-            typeof item.course === "string"
-              ? item.course
-              : item.course?._id || item;
-          try {
-            const detailRes = await axiosClient.get(`/courses/${courseId}`);
-            const courseData =
-              detailRes.data?.course || detailRes.data?.data || detailRes.data;
-            return { ...courseData, progress: item.progress || 0 };
-          } catch (err) {
-            return null;
-          }
-        });
+      const response = await axiosClient.get("/users/enrolled-courses");
 
-        const fullCourses = (await Promise.all(coursePromises)).filter(
-          (c) => c !== null,
-        );
-        setMyCourses(fullCourses);
-      } else {
-        setMyCourses([]);
-      }
+      const enrolledList = response.data?.data || [];
+
+      const fullCourses = enrolledList.map((item: any) => ({
+        ...item.course,
+        progress: item.progress || 0,
+      }));
+
+      console.log(`✅ Đã tải xong thông tin ${fullCourses.length} khóa học!`);
+      setMyCourses(fullCourses);
     } catch (error: any) {
-      console.log("❌ Lỗi tải Bàn học:", error.message);
+      console.log("❌ Lỗi tải Bàn học:", error.response?.status, error.message);
     } finally {
       setLoading(false);
     }
   };
+  const handleContinueLearning = (courseId: string, slug: string) => {
+    navigation.navigate("CourseDetail", {
+      courseId: courseId,
+      slug: slug,
+    });
+  };
 
+  // CỰC KỲ QUAN TRỌNG: Dùng 'focus' để mỗi lần bấm vào Tab Bàn Học nó đều gọi lại API để làm mới dữ liệu
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
       fetchMyCourses();
     });
+
     return unsubscribe;
   }, [navigation]);
 
   const renderCourseItem = ({ item }: { item: any }) => {
-    const courseId = item._id || item.course?._id || item;
-    const title = item.title || item.course?.title || "Khóa học nghệ thuật";
+    const courseId = item._id;
+    const title = item.title || "Khóa học nghệ thuật";
     const thumbnail =
-      item.thumbnail ||
-      item.course?.thumbnail ||
-      "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400";
+      item.thumbnail &&
+      !item.thumbnail.startsWith("data:") &&
+      !item.thumbnail.includes("youtube")
+        ? item.thumbnail
+        : "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400";
+    const progress = item.progress || 0;
 
     return (
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.9}
-        onPress={() =>
-          navigation.navigate("CourseDetail", { courseId: courseId })
-        }
+        onPress={() => handleContinueLearning(courseId, item.slug)}
       >
         <Image source={{ uri: thumbnail }} style={styles.thumbnail} />
+
         <View style={styles.infoBox}>
           <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
+          {/* 
           <View style={styles.progressRow}>
             <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: "0%" }]} />
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${progress}%` as any },
+                ]}
+              />
             </View>
-            <Text style={styles.progressText}>0%</Text>
-          </View>
+            <Text style={styles.progressText}>{progress}%</Text>
+          </View> */}
+
           <TouchableOpacity
             style={styles.studyButton}
-            onPress={() =>
-              navigation.navigate("CourseDetail", { courseId: courseId })
-            }
+            onPress={() => handleContinueLearning(courseId, item.slug)}
           >
             <Text style={styles.studyButtonText}>Tiếp tục học 🚀</Text>
           </TouchableOpacity>
@@ -113,9 +114,7 @@ export default function MyCoursesScreen({ navigation }: any) {
       ) : (
         <FlatList
           data={myCourses}
-          keyExtractor={(item, index) =>
-            item._id || item.course?._id || index.toString()
-          }
+          keyExtractor={(item, index) => item._id || index.toString()}
           renderItem={renderCourseItem}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
@@ -131,9 +130,10 @@ export default function MyCoursesScreen({ navigation }: any) {
               <Text style={styles.emptySubText}>
                 Bé hãy nhờ bố mẹ mua khóa học để bắt đầu nhé!
               </Text>
+
               <TouchableOpacity
                 style={styles.exploreButton}
-                onPress={() => navigation.navigate("HomeTab")}
+                onPress={() => navigation.navigate("Home")}
               >
                 <Text style={styles.exploreButtonText}>Đi khám phá ngay</Text>
               </TouchableOpacity>
@@ -147,8 +147,17 @@ export default function MyCoursesScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FDFBF7" },
+  header: { padding: 20, paddingTop: 10 },
+  headerTitle: { fontSize: 26, fontWeight: "900", color: "#00B894" },
+  headerSubtitle: {
+    fontSize: 15,
+    color: "#55E6C1",
+    marginTop: 5,
+    fontWeight: "600",
+  },
   centerContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  listContainer: { paddingHorizontal: 20, paddingBottom: 30, paddingTop: 10 },
+  listContainer: { paddingHorizontal: 20, paddingBottom: 30 },
+
   card: {
     flexDirection: "row",
     backgroundColor: "#FFF",
@@ -175,6 +184,7 @@ const styles = StyleSheet.create({
     color: "#37474F",
     marginBottom: 8,
   },
+
   progressRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
   progressBarBg: {
     flex: 1,
@@ -190,6 +200,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   progressText: { fontSize: 12, fontWeight: "bold", color: "#00B894" },
+
   studyButton: {
     backgroundColor: "#E8F5E9",
     paddingVertical: 8,
@@ -197,6 +208,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   studyButtonText: { color: "#00B894", fontWeight: "bold", fontSize: 14 },
+
   emptyBox: { alignItems: "center", marginTop: 60 },
   emptyIcon: { width: 120, height: 120, opacity: 0.8, marginBottom: 15 },
   emptyText: {
