@@ -13,8 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
-import { createPayment } from "../../api/paymentService";
 import { useFocusEffect } from "@react-navigation/native";
+import { createPayment, checkCourseInCart } from "../../api/paymentService";
 
 export default function CourseDetailScreen({ route, navigation }: any) {
   const { courseId, slug } = route.params || {};
@@ -28,14 +28,24 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const isFirstMount = useRef(true);
 
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [courseInComboWarning, setCourseInComboWarning] = useState<
+    string | null
+  >(null);
 
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
   const isInWishlist = useShopStore((state) => state.isInWishlist);
   const addToCart = useShopStore((state) => state.addToCart);
   const isInCart = useShopStore((state) => state.isInCart);
+  const getCourseIdsInCombos = useShopStore(
+    (state) => state.getCourseIdsInCombos,
+  );
 
   const isLiked = course ? isInWishlist(course._id) : false;
   const alreadyInCart = course ? isInCart(course._id) : false;
+
+  const isCourseInCombo = course
+    ? getCourseIdsInCombos().includes(course._id)
+    : false;
 
   const fetchCourseDetail = async () => {
     if (!courseId && !slug) return;
@@ -176,13 +186,29 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       Alert.alert("Yêu thích 💖", "Đã thêm khóa học vào danh sách Yêu thích!");
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!course) return;
 
     if (isEnrolled) {
       Alert.alert(
         "Đã sở hữu",
         "Bé đã có khóa học này rồi, hãy vào Bàn học để xem nhé!",
+      );
+      return;
+    }
+
+    if (isCourseInCombo) {
+      Alert.alert(
+        "Không thể thêm vào giỏ",
+        courseInComboWarning ||
+          "Khóa học này đã có trong một Combo ở giỏ hàng.",
+        [
+          { text: "Ở lại", style: "cancel" },
+          {
+            text: "Đi đến Giỏ hàng",
+            onPress: () => navigation.navigate("Cart"),
+          },
+        ],
       );
       return;
     }
@@ -195,7 +221,9 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       return;
     }
 
+    // ✅ Just call addToCart, don't await (it handles sync internally)
     addToCart(course);
+
     Alert.alert(
       "Thành công! 🛒",
       "Đã thêm khóa học vào Giỏ hàng của phụ huynh!",
@@ -464,41 +492,59 @@ export default function CourseDetailScreen({ route, navigation }: any) {
 
       <View style={styles.bottomBar}>
         {!isEnrolled && (
-          <View style={styles.buttonRow}>
-            {/* Nút Thêm vào Giỏ hàng */}
-            <TouchableOpacity
-              style={[
-                styles.secondaryButton,
-                alreadyInCart && { opacity: 0.6 },
-              ]}
-              onPress={handleAddToCart}
-              disabled={alreadyInCart}
-            >
-              <Ionicons name="cart-outline" size={20} color="#FF8A80" />
-              <Text style={styles.secondaryButtonText}>
-                {alreadyInCart ? "Đã có" : "Giỏ hàng"}
-              </Text>
-            </TouchableOpacity>
+          <>
+            {/* ✅ Hiển thị warning nếu course đã có trong combo */}
+            {isCourseInCombo && courseInComboWarning && (
+              <View style={styles.warningBanner}>
+                <Ionicons name="information-circle" size={20} color="#FF9800" />
+                <Text style={styles.warningBannerText} numberOfLines={2}>
+                  {courseInComboWarning}
+                </Text>
+              </View>
+            )}
 
-            {/* Nút Mua ngay */}
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                isProcessingPayment && { opacity: 0.6 },
-              ]}
-              onPress={handleBuyNow}
-              disabled={isProcessingPayment}
-            >
-              <Text style={styles.primaryButtonText}>
-                {isProcessingPayment
-                  ? "Đang xử lý..."
-                  : `Mua ngay - $${course.price}`}
-              </Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[
+                  styles.secondaryButton,
+                  isCourseInCombo && styles.disabledButton,
+                ]}
+                onPress={handleAddToCart}
+                disabled={isCourseInCombo || isProcessingPayment}
+              >
+                <Ionicons
+                  name="cart-outline"
+                  size={18}
+                  color={isCourseInCombo ? "#B0BEC5" : "#FF8A80"}
+                />
+                <Text
+                  style={[
+                    styles.secondaryButtonText,
+                    isCourseInCombo && styles.disabledButtonText,
+                  ]}
+                >
+                  {isCourseInCombo ? "Đã có trong Combo" : "Thêm vào giỏ"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.primaryButton,
+                  isProcessingPayment && { opacity: 0.7 },
+                ]}
+                onPress={handleBuyNow}
+                disabled={isProcessingPayment}
+              >
+                {isProcessingPayment ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Mua ngay</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
         )}
 
-        {/* Nút Vào học ngay khi đã mua */}
         {isEnrolled && (
           <TouchableOpacity
             style={styles.enrolledButton}
@@ -509,7 +555,7 @@ export default function CourseDetailScreen({ route, navigation }: any) {
               })
             }
           >
-            <Text style={styles.buyButtonText}>Vào học ngay 🚀</Text>
+            <Text style={styles.primaryButtonText}>Vào học ngay 🚀</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -756,4 +802,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   buyButtonText: { color: "#FFF", fontSize: 18, fontWeight: "900" },
+  warningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E0",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginBottom: 10,
+    gap: 8,
+  },
+  warningBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#F57C00",
+  },
+  disabledButton: {
+    backgroundColor: "#F5F5F5",
+    borderColor: "#E0E0E0",
+  },
+  disabledButtonText: {
+    color: "#B0BEC5",
+  },
 });

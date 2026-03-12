@@ -19,21 +19,28 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
     txnRef = "",
     courseId = "",
     itemId = "",
+    itemIds = [],
     isFromCart = false,
+    isBulkCheckout = false,
+    itemCount = 0,
   } = route?.params || {};
 
   const webviewRef = useRef<WebView>(null);
   const [hasProcessed, setHasProcessed] = useState(false);
   const alertShownRef = useRef(false);
-  const [isProcessingSuccess, setIsProcessingSuccess] = useState(false); // ✅ THÊM STATE NÀY
+  const [isProcessingSuccess, setIsProcessingSuccess] = useState(false);
 
   const removeFromCart = useShopStore((state) => state.removeFromCart);
+  const clearCart = useShopStore((state) => state.clearCart);
 
   console.log("📦 Payment URL:", paymentUrl);
   console.log("🎫 TxnRef:", txnRef);
   console.log("📚 Course ID:", courseId);
   console.log("📦 Item ID:", itemId);
+  console.log("📦 Item IDs:", itemIds);
   console.log("🛒 From Cart:", isFromCart);
+  console.log("🛒 Bulk Checkout:", isBulkCheckout);
+  console.log("🛒 Item Count:", itemCount);
 
   const handlePaymentSuccess = async () => {
     if (hasProcessed || alertShownRef.current) {
@@ -43,7 +50,7 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
 
     setHasProcessed(true);
     alertShownRef.current = true;
-    setIsProcessingSuccess(true); // ✅ ẨN WEBVIEW NGAY
+    setIsProcessingSuccess(true);
 
     try {
       if (txnRef) {
@@ -54,23 +61,31 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
       console.error("❌ Verify payment error:", error);
     }
 
-    if (isFromCart && itemId) {
-      removeFromCart(itemId);
-      console.log("🗑️ Removed item from cart:", itemId);
+    // ✅ Xử lý xóa items khỏi cart
+    if (isFromCart) {
+      if (isBulkCheckout) {
+        // Bulk checkout: clear toàn bộ cart
+        clearCart();
+        console.log("🗑️ Cleared entire cart after bulk checkout");
+      } else if (itemId) {
+        // Single item: chỉ xóa item đó
+        removeFromCart(itemId);
+        console.log("🗑️ Removed item from cart:", itemId);
+      }
     }
 
-    Alert.alert(
-      "Thanh toán thành công! 🎉",
-      "Khóa học đã được thêm vào Bàn học của bé.",
-      [
-        {
-          text: "Tuyệt vời",
-          onPress: () => {
-            navigation.goBack();
-          },
+    const successMessage = isBulkCheckout
+      ? `Tất cả ${itemCount || "các"} khóa học đã được thêm vào Bàn học của bé.`
+      : "Khóa học đã được thêm vào Bàn học của bé.";
+
+    Alert.alert("Thanh toán thành công! 🎉", successMessage, [
+      {
+        text: "Tuyệt vời",
+        onPress: () => {
+          navigation.goBack();
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const handleNavigationStateChange = async (navState: WebViewNavigation) => {
@@ -79,7 +94,6 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
 
     if (hasProcessed || alertShownRef.current) return;
 
-    // Chỉ xử lý vnpay-return thật (không phải localhost)
     const isReturnUrl =
       url.includes("vnpay-return") && !url.includes("localhost");
 
@@ -133,7 +147,6 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
 
       {paymentUrl ? (
         <>
-          {/* ✅ CHỈ HIỆN WEBVIEW KHI CHƯA XỬ LÝ THÀNH CÔNG */}
           {!isProcessingSuccess && (
             <WebView
               ref={webviewRef}
@@ -156,7 +169,6 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
                   return;
                 }
 
-                // Xử lý localhost callback (ERR_CONNECTION_REFUSED)
                 if (
                   nativeEvent.description?.includes("ERR_CONNECTION_REFUSED")
                 ) {
@@ -188,7 +200,6 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
                   }
                 }
 
-                // Lỗi thật sự
                 if (!hasProcessed && !alertShownRef.current) {
                   console.error("❌ Real WebView error:", nativeEvent);
                   setHasProcessed(true);
@@ -207,7 +218,6 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
             />
           )}
 
-          {/* ✅ HIỆN SUCCESS OVERLAY KHI ĐANG XỬ LÝ THÀNH CÔNG */}
           {isProcessingSuccess && (
             <View style={styles.successOverlay}>
               <ActivityIndicator size="large" color="#FF8A80" />
@@ -232,10 +242,7 @@ export default function PaymentWebviewScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFF",
-  },
+  container: { flex: 1, backgroundColor: "#FFF" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -246,17 +253,9 @@ const styles = StyleSheet.create({
     borderBottomColor: "#EEE",
     backgroundColor: "#FFF",
   },
-  backBtn: {
-    padding: 5,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#2D3436",
-  },
-  headerSpacer: {
-    width: 28,
-  },
+  backBtn: { padding: 5 },
+  headerTitle: { fontSize: 18, fontWeight: "bold", color: "#2D3436" },
+  headerSpacer: { width: 28 },
   loadingContainer: {
     position: "absolute",
     top: 0,
@@ -267,15 +266,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFF",
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 15,
-    color: "#78909C",
-  },
-  webview: {
-    flex: 1,
-  },
-  // ✅ THÊM STYLE CHO SUCCESS OVERLAY
+  loadingText: { marginTop: 12, fontSize: 15, color: "#78909C" },
+  webview: { flex: 1 },
   successOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -307,9 +299,5 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 25,
   },
-  retryButtonText: {
-    color: "#FFF",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
+  retryButtonText: { color: "#FFF", fontSize: 16, fontWeight: "bold" },
 });
