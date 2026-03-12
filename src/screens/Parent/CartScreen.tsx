@@ -12,8 +12,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useShopStore } from "../../store/useShopStore";
-import axiosClient from "../../api/axiosClient";
-import CustomHeader from "../../components/CustomHeader"; // <-- IMPORT HEADER MỚI
+import { createPayment } from "../../api/paymentService"; // IMPORT PAYMENT SERVICE
+import CustomHeader from "../../components/CustomHeader";
 
 export default function CartScreen({ navigation }: any) {
   const cartItems = useShopStore((state) => state.cart);
@@ -37,7 +37,7 @@ export default function CartScreen({ navigation }: any) {
 
   const handleApplyCoupon = () => {
     if (!coupon) return;
-    Alert.alert("Mã giảm giá", `Đã áp dụng mã ${coupon} thành công!`);
+    Alert.alert("Mã giảm giá", `Đã áp dụng mã ${coupon} thành công! 🎉`);
     setCoupon("");
   };
 
@@ -49,7 +49,7 @@ export default function CartScreen({ navigation }: any) {
 
     Alert.alert(
       "Xác nhận thanh toán",
-      `Bạn xác nhận đăng ký ${cartItems.length} khóa học với tổng tiền $${totalAmount.toFixed(2)}?`,
+      `Bạn xác nhận thanh toán ${cartItems.length} khóa học với tổng tiền $${totalAmount.toFixed(2)}?`,
       [
         { text: "Hủy", style: "cancel" },
         {
@@ -57,21 +57,75 @@ export default function CartScreen({ navigation }: any) {
           onPress: async () => {
             try {
               setIsCheckingOut(true);
-              await Promise.all(
-                cartItems.map((item) =>
-                  axiosClient.post(`/users/enroll/${item._id || item.id}`),
-                ),
-              );
-              clearCart();
-              Alert.alert(
-                "Thanh toán thành công!",
-                "Các khóa học đã được thêm vào Bàn học của bé.",
-                [{ text: "Tuyệt vời", onPress: () => navigation.popToTop() }],
-              );
+
+              if (cartItems.length === 1) {
+                const item = cartItems[0];
+                const itemType = item.isCombo ? "combo" : "course";
+
+                const paymentData = await createPayment({
+                  itemType: itemType,
+                  itemId: item._id,
+                });
+
+                if (paymentData.success && paymentData.paymentUrl) {
+                  navigation.navigate("PaymentWebview", {
+                    paymentUrl: paymentData.paymentUrl,
+                    txnRef: paymentData.txnRef,
+                    itemId: item._id,
+                    itemType: itemType,
+                    isFromCart: true, // Đánh dấu từ giỏ hàng để clear cart sau khi thanh toán thành công
+                  });
+                } else {
+                  Alert.alert(
+                    "Lỗi",
+                    "Không thể tạo thanh toán. Vui lòng thử lại!",
+                  );
+                }
+              } else {
+                // Nếu có nhiều items: Tạo thanh toán cho item đầu tiên
+                // (Lý tưởng nhất là backend hỗ trợ bulk checkout)
+                Alert.alert(
+                  "Thanh toán nhiều khóa học",
+                  "Hiện tại hệ thống chỉ hỗ trợ thanh toán từng khóa học một. Bạn sẽ được chuyển đến thanh toán khóa học đầu tiên.",
+                  [
+                    { text: "Hủy", style: "cancel" },
+                    {
+                      text: "Tiếp tục",
+                      onPress: async () => {
+                        const firstItem = cartItems[0];
+                        const itemType = firstItem.isCombo ? "combo" : "course";
+
+                        try {
+                          const paymentData = await createPayment({
+                            itemType: itemType,
+                            itemId: firstItem._id,
+                          });
+
+                          if (paymentData.success && paymentData.paymentUrl) {
+                            navigation.navigate("PaymentWebview", {
+                              paymentUrl: paymentData.paymentUrl,
+                              txnRef: paymentData.txnRef,
+                              itemId: firstItem._id,
+                              itemType: itemType,
+                              isFromCart: true,
+                            });
+                          }
+                        } catch (error: any) {
+                          Alert.alert(
+                            "Lỗi thanh toán",
+                            error.response?.data?.message ||
+                              "Không thể tạo thanh toán. Vui lòng thử lại!",
+                          );
+                        }
+                      },
+                    },
+                  ],
+                );
+              }
             } catch (error: any) {
               const errorMsg =
                 error.response?.data?.message ||
-                "Có lỗi xảy ra khi đăng ký khóa học.";
+                "Có lỗi xảy ra khi tạo thanh toán.";
               Alert.alert("Thanh toán thất bại", errorMsg);
             } finally {
               setIsCheckingOut(false);
@@ -96,6 +150,7 @@ export default function CartScreen({ navigation }: any) {
         <Text style={styles.itemTitle} numberOfLines={2}>
           {item.title}
         </Text>
+        {item.isCombo && <Text style={styles.comboLabel}>📦 Combo</Text>}
         <Text style={styles.itemPrice}>
           {item.price === 0 ? "Miễn phí" : `$${item.price}`}
         </Text>
@@ -114,7 +169,6 @@ export default function CartScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      {/* THÊM CUSTOM HEADER VÀO ĐÂY */}
       <CustomHeader title="Giỏ hàng" rightIcon="cart-outline" />
 
       <FlatList
@@ -213,7 +267,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: "#37474F",
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  comboLabel: {
+    fontSize: 12,
+    color: "#FF8A80",
+    fontWeight: "bold",
+    marginBottom: 4,
   },
   itemPrice: { fontSize: 18, fontWeight: "900", color: "#FF8A80" },
   actionBox: { paddingHorizontal: 10 },

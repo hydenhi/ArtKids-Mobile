@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -6,16 +6,15 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
+  Alert,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DrawerActions } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
-
-// IMPORT CUSTOM TOAST VỪA TẠO
-import CustomToast from "../../components/CustomToast";
+import { createPayment } from "../../api/paymentService";
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function CourseDetailScreen({ route, navigation }: any) {
   const { courseId, slug } = route.params || {};
@@ -24,76 +23,135 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const [course, setCourse] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isEnrolled, setIsEnrolled] = useState(false);
 
-  // STATE ĐỂ QUẢN LÝ THÔNG BÁO (TOAST)
-  const [toast, setToast] = useState({
-    visible: false,
-    message: "",
-    type: "success" as any,
-  });
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const isFirstMount = useRef(true);
+
+  const [isEnrolled, setIsEnrolled] = useState(false);
 
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
   const isInWishlist = useShopStore((state) => state.isInWishlist);
   const addToCart = useShopStore((state) => state.addToCart);
-  const removeFromCart = useShopStore((state) => state.removeFromCart);
   const isInCart = useShopStore((state) => state.isInCart);
 
   const isLiked = course ? isInWishlist(course._id) : false;
   const alreadyInCart = course ? isInCart(course._id) : false;
 
-  // HÀM HIỂN THỊ TOAST TỰ ẨN SAU 2 GIÂY
-  const showToast = (
-    message: string,
-    type: "success" | "info" | "warning" = "success",
-  ) => {
-    setToast({ visible: true, message, type });
-    setTimeout(() => {
-      setToast((prev) => ({ ...prev, visible: false }));
-    }, 2000);
+  const fetchCourseDetail = async () => {
+    if (!courseId && !slug) return;
+
+    try {
+      setLoading(true);
+      const fetchIdentifier = slug || courseId;
+      const validCourseId = courseId || slug;
+
+      const [courseRes, reviewRes, enrollCheckRes] = await Promise.all([
+        axiosClient.get(`/courses/${fetchIdentifier}`),
+        axiosClient
+          .get(`/reviews/course/${validCourseId}`)
+          .catch(() => ({ data: [] })),
+        axiosClient
+          .get(`/users/enroll/${validCourseId}/check`)
+          .catch(() => ({ data: { isEnrolled: false } })),
+      ]);
+
+      const courseData =
+        courseRes.data?.course || courseRes.data?.data || courseRes.data;
+      const reviewsData =
+        reviewRes.data?.reviews || reviewRes.data?.data || reviewRes.data || [];
+
+      const enrolledStatus =
+        enrollCheckRes.data?.isEnrolled ||
+        enrollCheckRes.data?.enrolled ||
+        enrollCheckRes.data?.data?.isEnrolled ||
+        false;
+
+      setCourse(courseData);
+      setReviews(reviewsData);
+      setIsEnrolled(enrolledStatus);
+
+      console.log("✅ Course loaded, enrolled:", enrolledStatus);
+    } catch (error: any) {
+      console.error("Fetch course error:", error);
+      Alert.alert(
+        "Lỗi",
+        "Không thể tải chi tiết khóa học. Vui lòng thử lại sau!",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Initial load
   useEffect(() => {
-    const fetchCourseDetail = async () => {
-      if (!courseId && !slug) return;
-      try {
-        setLoading(true);
-        const fetchIdentifier = slug || courseId;
-        const validCourseId = courseId || slug;
-        const [courseRes, reviewRes, enrollCheckRes] = await Promise.all([
-          axiosClient.get(`/courses/${fetchIdentifier}`),
-          axiosClient
-            .get(`/reviews/course/${validCourseId}`)
-            .catch(() => ({ data: [] })),
-          axiosClient
-            .get(`/users/enroll/${validCourseId}/check`)
-            .catch(() => ({ data: { isEnrolled: false } })),
-        ]);
-
-        const courseData =
-          courseRes.data?.course || courseRes.data?.data || courseRes.data;
-        const reviewsData =
-          reviewRes.data?.reviews ||
-          reviewRes.data?.data ||
-          reviewRes.data ||
-          [];
-        const enrolledStatus =
-          enrollCheckRes.data?.isEnrolled ||
-          enrollCheckRes.data?.enrolled ||
-          enrollCheckRes.data?.data?.isEnrolled ||
-          false;
-
-        setCourse(courseData);
-        setReviews(reviewsData);
-        setIsEnrolled(enrolledStatus);
-      } catch (error: any) {
-        showToast("Không thể tải chi tiết khóa học!", "warning");
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchCourseDetail();
   }, [courseId, slug]);
+
+  // Auto refetch khi quay lại từ Payment
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isFirstMount.current) {
+        isFirstMount.current = false;
+        return;
+      }
+      console.log("🔄 Screen focused, refetching course...");
+      fetchCourseDetail();
+    }, []),
+  );
+
+  const handleBuyNow = async () => {
+    if (!course) return;
+
+    if (isEnrolled) {
+      Alert.alert("Đã sở hữu", "Bé đã có khóa học này rồi!");
+      return;
+    }
+
+    Alert.alert(
+      "Xác nhận thanh toán",
+      `Bạn muốn mua khóa học "${course.title}" với giá $${course.price}?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Đồng ý",
+          onPress: async () => {
+            try {
+              setIsProcessingPayment(true);
+
+              const paymentData = await createPayment({
+                itemType: "course",
+                itemId: course._id,
+              });
+
+              if (paymentData.success && paymentData.paymentUrl) {
+                navigation.navigate("PaymentWebview", {
+                  paymentUrl: paymentData.paymentUrl,
+                  txnRef: paymentData.txnRef,
+                  courseId: course._id,
+                });
+              } else {
+                Alert.alert(
+                  "Lỗi",
+                  "Không thể tạo thanh toán. Vui lòng thử lại!",
+                );
+              }
+            } catch (error: any) {
+              console.error("Payment error:", error);
+              console.error("Error details:", error.response?.data);
+
+              Alert.alert(
+                "Lỗi thanh toán",
+                error.response?.data?.message ||
+                  "Không thể tạo thanh toán. Vui lòng thử lại!",
+              );
+            } finally {
+              setIsProcessingPayment(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handlePressLesson = (lesson: any) => {
     const isFreeOrTrial = lesson.isTrial || lesson.isFree || false;
@@ -104,35 +162,48 @@ export default function CourseDetailScreen({ route, navigation }: any) {
         initialLesson: lesson,
       });
     } else {
-      showToast("Khóa học bị khóa. Bố mẹ hãy mua để bé học nhé! ", "warning");
+      Alert.alert(
+        "Khóa học bị khóa",
+        "Bé hãy nhờ bố mẹ mua khóa học để xem bài này nhé! 🔒",
+      );
     }
   };
 
   const handleToggleWishlist = () => {
     if (!course) return;
     toggleWishlist(course);
-    if (!isLiked) {
-      showToast("Đã thêm vào danh sách Yêu thích! ", "success");
-    } else {
-      showToast("Đã bỏ khỏi danh sách Yêu thích ", "info");
-    }
+    if (!isLiked)
+      Alert.alert("Yêu thích 💖", "Đã thêm khóa học vào danh sách Yêu thích!");
   };
 
-  const handleToggleCart = () => {
+  const handleAddToCart = () => {
     if (!course) return;
 
     if (isEnrolled) {
-      showToast("Bé đã có khóa học này trong bàn học rồi!", "warning");
+      Alert.alert(
+        "Đã sở hữu",
+        "Bé đã có khóa học này rồi, hãy vào Bàn học để xem nhé!",
+      );
       return;
     }
 
     if (alreadyInCart) {
-      removeFromCart(course._id);
-      showToast("Đã bỏ khóa học khỏi Giỏ hàng ", "info");
-    } else {
-      addToCart(course);
-      showToast("Đã thêm vào Giỏ hàng! ", "success");
+      Alert.alert("Giỏ hàng", "Khóa học này đã có trong giỏ hàng rồi nhé!", [
+        { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
+        { text: "Ở lại", style: "cancel" },
+      ]);
+      return;
     }
+
+    addToCart(course);
+    Alert.alert(
+      "Thành công! 🛒",
+      "Đã thêm khóa học vào Giỏ hàng của phụ huynh!",
+      [
+        { text: "Ở lại trang", style: "cancel" },
+        { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
+      ],
+    );
   };
 
   const renderCurriculum = () => {
@@ -265,7 +336,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
         </Text>
       </View>
     );
-
   if (!course)
     return (
       <View style={styles.loadingContainer}>
@@ -288,12 +358,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <CustomToast
-        visible={toast.visible}
-        message={toast.message}
-        type={toast.type}
-      />
-
       <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
         <View style={styles.headerImageContainer}>
           <Image
@@ -311,25 +375,16 @@ export default function CourseDetailScreen({ route, navigation }: any) {
             >
               <Ionicons name="chevron-back" size={24} color="#37474F" />
             </TouchableOpacity>
-
-            <View style={{ flexDirection: "row" }}>
-              <TouchableOpacity
-                style={[styles.iconButton, { marginRight: 10 }]}
-                onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-              >
-                <Ionicons name="menu" size={24} color="#37474F" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={handleToggleWishlist}
-              >
-                <Ionicons
-                  name={isLiked ? "heart" : "heart-outline"}
-                  size={24}
-                  color="#FF5252"
-                />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={handleToggleWishlist}
+            >
+              <Ionicons
+                name={isLiked ? "heart" : "heart-outline"}
+                size={24}
+                color="#FF5252"
+              />
+            </TouchableOpacity>
           </SafeAreaView>
         </View>
 
@@ -343,11 +398,8 @@ export default function CourseDetailScreen({ route, navigation }: any) {
                 {course.averageRating || "5.0"} ({course.numOfReviews || 0})
               </Text>
             </View>
-            {/* ĐÃ CHUYỂN ĐỔI SANG VND Ở ĐÂY */}
             <Text style={styles.price}>
-              {course.price === 0
-                ? "Miễn phí"
-                : `${course.price?.toLocaleString("vi-VN")} đ`}
+              {course.price === 0 ? "Miễn phí" : `$${course.price}`}
             </Text>
           </View>
         </View>
@@ -411,42 +463,53 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={[
-            styles.buyButton,
-            isEnrolled && { backgroundColor: "#0984E3", marginRight: 0 },
-          ]}
-          onPress={
-            isEnrolled
-              ? () =>
-                  navigation.navigate("Learning", {
-                    courseTitle: course?.title,
-                    sections: course?.sections,
-                  })
-              : handleToggleCart
-          }
-        >
-          <Text style={styles.buyButtonText}>
-            {isEnrolled ? "Vào học ngay " : "Mua Khóa Học"}
-          </Text>
-        </TouchableOpacity>
         {!isEnrolled && (
-          // Đã sửa lại logic nút này: Bấm vào gọi handleToggleCart để Thêm/Xóa
+          <View style={styles.buttonRow}>
+            {/* Nút Thêm vào Giỏ hàng */}
+            <TouchableOpacity
+              style={[
+                styles.secondaryButton,
+                alreadyInCart && { opacity: 0.6 },
+              ]}
+              onPress={handleAddToCart}
+              disabled={alreadyInCart}
+            >
+              <Ionicons name="cart-outline" size={20} color="#FF8A80" />
+              <Text style={styles.secondaryButtonText}>
+                {alreadyInCart ? "Đã có" : "Giỏ hàng"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Nút Mua ngay */}
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                isProcessingPayment && { opacity: 0.6 },
+              ]}
+              onPress={handleBuyNow}
+              disabled={isProcessingPayment}
+            >
+              <Text style={styles.primaryButtonText}>
+                {isProcessingPayment
+                  ? "Đang xử lý..."
+                  : `Mua ngay - $${course.price}`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Nút Vào học ngay khi đã mua */}
+        {isEnrolled && (
           <TouchableOpacity
-            style={[
-              styles.cartIconButton,
-              alreadyInCart && {
-                backgroundColor: "#FFEBEE",
-                borderColor: "#D63031",
-              },
-            ]}
-            onPress={handleToggleCart}
+            style={styles.enrolledButton}
+            onPress={() =>
+              navigation.navigate("Learning", {
+                courseTitle: course?.title,
+                sections: course?.sections,
+              })
+            }
           >
-            <Ionicons
-              name={alreadyInCart ? "trash" : "cart-outline"}
-              size={28}
-              color={alreadyInCart ? "#D63031" : "#FF8A80"}
-            />
+            <Text style={styles.buyButtonText}>Vào học ngay 🚀</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -611,6 +674,7 @@ const styles = StyleSheet.create({
   reviewUser: { fontSize: 15, fontWeight: "bold", color: "#37474F" },
   starsRow: { flexDirection: "row" },
   reviewComment: { fontSize: 14, color: "#78909C", lineHeight: 20 },
+  // Sửa lại styles (thay thế từ dòng 570-626):
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -620,12 +684,57 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    flexDirection: "row",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -5 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 10,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    gap: 10,
+  },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: "#FF8A80",
+    gap: 6,
+  },
+  secondaryButtonText: {
+    color: "#FF8A80",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  primaryButton: {
+    flex: 2,
+    backgroundColor: "#FF8A80",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryButtonText: {
+    color: "#FFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  enrolledButton: {
+    backgroundColor: "#0984E3",
+    padding: 16,
+    borderRadius: 25,
+    alignItems: "center",
+    width: "100%",
   },
   cartIconButton: {
     width: 56,

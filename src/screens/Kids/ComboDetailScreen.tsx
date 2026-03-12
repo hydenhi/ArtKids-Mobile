@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,17 +10,23 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DrawerActions } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native"; // THÊM IMPORT NÀY
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
+import { createPayment } from "../../api/paymentService";
 
 export default function ComboDetailScreen({ route, navigation }: any) {
   const { comboId, slug } = route.params || {};
 
+  const isMounted = useRef(true);
+  const isFirstMount = useRef(true); // Thêm ref này để track lần mount đầu tiên
+
   const [combo, setCombo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [ownedCourseIds, setOwnedCourseIds] = useState<string[]>([]);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
   const isInWishlist = useShopStore((state) => state.isInWishlist);
@@ -30,57 +36,116 @@ export default function ComboDetailScreen({ route, navigation }: any) {
   const isLiked = combo ? isInWishlist(combo._id) : false;
   const alreadyInCart = combo ? isInCart(combo._id) : false;
 
-  useEffect(() => {
-    const fetchComboDetail = async () => {
-      if (!comboId && !slug) return;
-      try {
-        setLoading(true);
-        const fetchIdentifier = slug || comboId;
-        const [comboRes, enrollCheckRes] = await Promise.all([
-          axiosClient.get(`/combos/${fetchIdentifier}`),
-          axiosClient
-            .get(`/users/enroll/${comboId || slug}/check`)
-            .catch(() => ({ data: { isEnrolled: false } })),
-        ]);
+  // Tách fetch logic thành function riêng để tái sử dụng
+  const fetchComboDetail = async () => {
+    if (!comboId && !slug) return;
 
-        const comboData =
-          comboRes.data?.data || comboRes.data?.combo || comboRes.data;
-        const enrolledStatus =
-          enrollCheckRes.data?.isEnrolled ||
-          enrollCheckRes.data?.enrolled ||
-          enrollCheckRes.data?.data?.isEnrolled ||
-          false;
+    try {
+      setLoading(true);
+      const fetchIdentifier = slug || comboId;
 
+      const comboRes = await axiosClient.get(`/combos/${fetchIdentifier}`);
+      const comboData =
+        comboRes.data?.data || comboRes.data?.combo || comboRes.data;
+
+      if (isMounted.current) {
         setCombo(comboData);
-        setIsEnrolled(enrolledStatus);
-      } catch (error: any) {
+      }
+
+      if (comboData?.courses && comboData.courses.length > 0) {
+        const enrollmentChecks = await Promise.allSettled(
+          comboData.courses.map((course: any) =>
+            axiosClient
+              .get(`/users/enroll/${course._id}/check`)
+              .then((res) => ({
+                courseId: course._id,
+                isEnrolled:
+                  res.data?.isEnrolled ||
+                  res.data?.enrolled ||
+                  res.data?.data?.isEnrolled ||
+                  false,
+              }))
+              .catch(() => ({
+                courseId: course._id,
+                isEnrolled: false,
+              })),
+          ),
+        );
+
+        const owned = enrollmentChecks
+          .filter(
+            (result) =>
+              result.status === "fulfilled" && result.value.isEnrolled,
+          )
+          .map((result: any) => result.value.courseId);
+
+        if (isMounted.current) {
+          setOwnedCourseIds(owned);
+
+          const allCoursesOwned = comboData.courses.every((course: any) =>
+            owned.includes(course._id),
+          );
+          setIsEnrolled(allCoursesOwned);
+
+          console.log("✅ Combo loaded, enrolled:", allCoursesOwned);
+          console.log("✅ Owned courses:", owned);
+        }
+      }
+    } catch (error: any) {
+      console.error("Fetch combo error:", error);
+      if (isMounted.current) {
         Alert.alert(
           "Lỗi",
           "Không thể tải chi tiết Combo. Vui lòng thử lại sau!",
         );
-      } finally {
+      }
+    } finally {
+      if (isMounted.current) {
         setLoading(false);
       }
-    };
+    }
+  };
+
+  // Initial load khi component mount lần đầu
+  useEffect(() => {
     fetchComboDetail();
+
+    return () => {
+      isMounted.current = false;
+    };
   }, [comboId, slug]);
+
+  // Auto refetch khi quay lại từ Payment hoặc màn hình khác
+  useFocusEffect(
+    React.useCallback(() => {
+      // Bỏ qua lần đầu tiên vì useEffect đã fetch rồi
+      if (isFirstMount.current) {
+        isFirstMount.current = false;
+        return;
+      }
+      console.log("🔄 Screen focused, refetching combo...");
+      fetchComboDetail();
+    }, [comboId, slug]),
+  );
 
   const handleToggleWishlist = () => {
     if (!combo) return;
     toggleWishlist(combo);
     if (!isLiked)
-      Alert.alert("Yêu thích", "Đã thêm Combo vào danh sách Yêu thích!");
+      Alert.alert("Yêu thích 💖", "Đã thêm Combo vào danh sách Yêu thích!");
   };
 
   const handleAddToCart = () => {
     if (!combo) return;
+
     if (isEnrolled) {
       Alert.alert(
         "Đã sở hữu",
-        "Bạn đã mua Combo này rồi, hãy vào Bàn học để xem nhé!",
+        "Bạn đã sở hữu tất cả khóa học trong Combo này rồi!",
       );
       return;
     }
+
     if (alreadyInCart) {
       Alert.alert("Giỏ hàng", "Combo này đã có trong giỏ hàng rồi nhé!", [
         { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
@@ -88,6 +153,7 @@ export default function ComboDetailScreen({ route, navigation }: any) {
       ]);
       return;
     }
+
     addToCart({ ...combo, isCombo: true });
     Alert.alert("Thành công! 🛒", "Đã thêm Combo vào Giỏ hàng của phụ huynh!", [
       { text: "Ở lại trang", style: "cancel" },
@@ -95,34 +161,121 @@ export default function ComboDetailScreen({ route, navigation }: any) {
     ]);
   };
 
+  const handleBuyNow = async () => {
+    if (!combo) return;
+
+    if (isEnrolled) {
+      Alert.alert(
+        "Đã sở hữu",
+        "Bạn đã sở hữu tất cả khóa học trong Combo này rồi!",
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Xác nhận thanh toán",
+      `Bạn muốn mua Combo "${combo.title}" với giá ${combo.price?.toLocaleString("vi-VN")} đ?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Đồng ý",
+          onPress: async () => {
+            try {
+              if (!isMounted.current) return;
+
+              setIsProcessingPayment(true);
+
+              const paymentData = await createPayment({
+                itemType: "combo",
+                itemId: combo._id,
+              });
+
+              if (!isMounted.current) return;
+
+              if (paymentData.success && paymentData.paymentUrl) {
+                navigation.navigate("PaymentWebview", {
+                  paymentUrl: paymentData.paymentUrl,
+                  txnRef: paymentData.txnRef,
+                  courseId: combo._id,
+                  itemType: "combo",
+                  isCombo: true,
+                });
+              } else {
+                if (isMounted.current) {
+                  Alert.alert(
+                    "Lỗi",
+                    "Không thể tạo thanh toán. Vui lòng thử lại!",
+                  );
+                }
+              }
+            } catch (error: any) {
+              console.error("Payment error:", error);
+              console.error("Error response:", error.response?.data);
+
+              if (isMounted.current) {
+                Alert.alert(
+                  "Lỗi thanh toán",
+                  error.response?.data?.message ||
+                    "Không thể tạo thanh toán. Vui lòng thử lại!",
+                );
+              }
+            } finally {
+              if (isMounted.current) {
+                setIsProcessingPayment(false);
+              }
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const renderCourses = () => {
     if (!combo?.courses || combo.courses.length === 0)
       return <Text style={styles.emptyText}>Combo chưa có khóa học nào.</Text>;
+
     return (
       <View style={styles.tabContent}>
         <Text style={styles.sectionTitle}>Các khóa học trong Combo</Text>
-        {combo.courses.map((course: any, index: number) => (
-          <TouchableOpacity
-            key={course._id || index}
-            style={styles.courseItem}
-            onPress={() =>
-              navigation.navigate("CourseDetail", {
-                courseId: course._id,
-                slug: course.slug,
-              })
-            }
-          >
-            <View style={styles.courseLeft}>
-              <View style={styles.iconBox}>
-                <Ionicons name="book" size={16} color="#00B894" />
+        {combo.courses.map((course: any, index: number) => {
+          const isOwned = ownedCourseIds.includes(course._id);
+          return (
+            <TouchableOpacity
+              key={course._id || index}
+              style={styles.courseItem}
+              onPress={() =>
+                navigation.navigate("CourseDetail", {
+                  courseId: course._id,
+                  slug: course.slug,
+                })
+              }
+            >
+              <View style={styles.courseLeft}>
+                <View
+                  style={[
+                    styles.iconBox,
+                    isOwned && { backgroundColor: "#E8F5E9" },
+                  ]}
+                >
+                  <Ionicons
+                    name={isOwned ? "checkmark-circle" : "book"}
+                    size={16}
+                    color={isOwned ? "#4CD137" : "#00B894"}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.courseTitle}>
+                    {course.title || `Khóa học ${index + 1}`}
+                  </Text>
+                  {isOwned && (
+                    <Text style={styles.ownedLabel}>✓ Đã sở hữu</Text>
+                  )}
+                </View>
               </View>
-              <Text style={styles.courseTitle}>
-                {course.title || `Khóa học ${index + 1}`}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#B2BEC3" />
-          </TouchableOpacity>
-        ))}
+              <Ionicons name="chevron-forward" size={20} color="#B2BEC3" />
+            </TouchableOpacity>
+          );
+        })}
       </View>
     );
   };
@@ -170,33 +323,22 @@ export default function ComboDetailScreen({ route, navigation }: any) {
             style={styles.thumbnail}
           />
           <SafeAreaView style={styles.floatingHeader}>
-            {/* CỤM NÚT TRÁI (Nút Quay lại) */}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => navigation.goBack()}
             >
               <Ionicons name="chevron-back" size={24} color="#37474F" />
             </TouchableOpacity>
-
-            {/* CỤM NÚT PHẢI (Menu + Trái tim) */}
-            <View style={{ flexDirection: "row" }}>
-              <TouchableOpacity
-                style={[styles.iconButton, { marginRight: 10 }]}
-                onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-              >
-                <Ionicons name="menu" size={24} color="#37474F" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={handleToggleWishlist}
-              >
-                <Ionicons
-                  name={isLiked ? "heart" : "heart-outline"}
-                  size={24}
-                  color="#FF5252"
-                />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={handleToggleWishlist}
+            >
+              <Ionicons
+                name={isLiked ? "heart" : "heart-outline"}
+                size={24}
+                color="#FF5252"
+              />
+            </TouchableOpacity>
           </SafeAreaView>
         </View>
 
@@ -224,44 +366,61 @@ export default function ComboDetailScreen({ route, navigation }: any) {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={[
-            styles.buyButton,
-            isEnrolled && { backgroundColor: "#0984E3", marginRight: 0 },
-          ]}
-          onPress={
-            isEnrolled
-              ? () => navigation.navigate("Tabs", { screen: "MyCoursesTab" })
-              : handleAddToCart
-          }
-        >
-          <Text style={styles.buyButtonText}>
-            {isEnrolled ? "Vào học ngay 🚀" : "Mua Combo"}
-          </Text>
-        </TouchableOpacity>
-        {!isEnrolled && (
+        {isEnrolled ? (
           <TouchableOpacity
-            style={[
-              styles.cartIconButton,
-              alreadyInCart && {
-                backgroundColor: "#E8F5E9",
-                borderColor: "#4CD137",
-              },
-            ]}
-            onPress={handleAddToCart}
+            style={[styles.buyButton, styles.ownedButton]}
+            onPress={() =>
+              navigation.navigate("DrawerMain", { screen: "MyCourses" })
+            }
           >
             <Ionicons
-              name={alreadyInCart ? "cart" : "cart-outline"}
-              size={28}
-              color={alreadyInCart ? "#4CD137" : "#FF8A80"}
+              name="checkmark-circle"
+              size={24}
+              color="#FFF"
+              style={{ marginRight: 8 }}
             />
+            <Text style={styles.buyButtonText}>Đã sở hữu</Text>
           </TouchableOpacity>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={[
+                styles.buyButton,
+                isProcessingPayment && { opacity: 0.7 },
+              ]}
+              onPress={handleBuyNow}
+              disabled={isProcessingPayment}
+            >
+              {isProcessingPayment ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.buyButtonText}>Mua Combo</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.cartIconButton,
+                alreadyInCart && {
+                  backgroundColor: "#E8F5E9",
+                  borderColor: "#4CD137",
+                },
+              ]}
+              onPress={handleAddToCart}
+            >
+              <Ionicons
+                name={alreadyInCart ? "cart" : "cart-outline"}
+                size={28}
+                color={alreadyInCart ? "#4CD137" : "#FF8A80"}
+              />
+            </TouchableOpacity>
+          </>
         )}
       </View>
     </View>
   );
 }
 
+// Styles giữ nguyên
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FDFBF7" },
   loadingContainer: {
@@ -352,13 +511,19 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 32,
     height: 32,
-    backgroundColor: "#E8F5E9",
+    backgroundColor: "#E1F5FE",
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
   courseTitle: { fontSize: 16, fontWeight: "600", color: "#37474F", flex: 1 },
+  ownedLabel: {
+    fontSize: 12,
+    color: "#4CD137",
+    fontWeight: "bold",
+    marginTop: 2,
+  },
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -391,8 +556,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF8A80",
     paddingVertical: 16,
     borderRadius: 25,
+    flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+  },
+  ownedButton: {
+    backgroundColor: "#4CD137",
+    marginRight: 0,
   },
   buyButtonText: { color: "#FFF", fontSize: 18, fontWeight: "900" },
 });
