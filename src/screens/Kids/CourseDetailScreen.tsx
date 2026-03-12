@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
+import { createPayment } from "../../api/paymentService";
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function CourseDetailScreen({ route, navigation }: any) {
   const { courseId, slug } = route.params || {};
@@ -22,7 +24,9 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // STATE MỚI: KIỂM TRA ĐÃ MUA KHÓA HỌC CHƯA
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const isFirstMount = useRef(true);
+
   const [isEnrolled, setIsEnrolled] = useState(false);
 
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
@@ -33,63 +37,130 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const isLiked = course ? isInWishlist(course._id) : false;
   const alreadyInCart = course ? isInCart(course._id) : false;
 
+  const fetchCourseDetail = async () => {
+    if (!courseId && !slug) return;
+
+    try {
+      setLoading(true);
+      const fetchIdentifier = slug || courseId;
+      const validCourseId = courseId || slug;
+
+      const [courseRes, reviewRes, enrollCheckRes] = await Promise.all([
+        axiosClient.get(`/courses/${fetchIdentifier}`),
+        axiosClient
+          .get(`/reviews/course/${validCourseId}`)
+          .catch(() => ({ data: [] })),
+        axiosClient
+          .get(`/users/enroll/${validCourseId}/check`)
+          .catch(() => ({ data: { isEnrolled: false } })),
+      ]);
+
+      const courseData =
+        courseRes.data?.course || courseRes.data?.data || courseRes.data;
+      const reviewsData =
+        reviewRes.data?.reviews || reviewRes.data?.data || reviewRes.data || [];
+
+      const enrolledStatus =
+        enrollCheckRes.data?.isEnrolled ||
+        enrollCheckRes.data?.enrolled ||
+        enrollCheckRes.data?.data?.isEnrolled ||
+        false;
+
+      setCourse(courseData);
+      setReviews(reviewsData);
+      setIsEnrolled(enrolledStatus);
+
+      console.log("✅ Course loaded, enrolled:", enrolledStatus);
+    } catch (error: any) {
+      console.error("Fetch course error:", error);
+      Alert.alert(
+        "Lỗi",
+        "Không thể tải chi tiết khóa học. Vui lòng thử lại sau!",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial load
   useEffect(() => {
-    const fetchCourseDetail = async () => {
-      if (!courseId && !slug) return;
-
-      try {
-        setLoading(true);
-        const fetchIdentifier = slug || courseId;
-        const validCourseId = courseId || slug; // Dùng id hoặc slug để check enroll
-
-        // Gọi 3 API CÙNG LÚC: Chi tiết, Đánh giá, và Check Đã Mua
-        const [courseRes, reviewRes, enrollCheckRes] = await Promise.all([
-          axiosClient.get(`/courses/${fetchIdentifier}`),
-          axiosClient
-            .get(`/reviews/course/${validCourseId}`)
-            .catch(() => ({ data: [] })),
-          // Dùng catch để lỡ chưa đăng nhập hoặc chưa mua thì API trả lỗi, ta mặc định là false
-          axiosClient
-            .get(`/users/enroll/${validCourseId}/check`)
-            .catch(() => ({ data: { isEnrolled: false } })),
-        ]);
-
-        const courseData =
-          courseRes.data?.course || courseRes.data?.data || courseRes.data;
-        const reviewsData =
-          reviewRes.data?.reviews ||
-          reviewRes.data?.data ||
-          reviewRes.data ||
-          [];
-
-        // Thích ứng tùy theo Backend trả về {isEnrolled: true} hay {enrolled: true} hay status 200
-        const enrolledStatus =
-          enrollCheckRes.data?.isEnrolled ||
-          enrollCheckRes.data?.enrolled ||
-          enrollCheckRes.data?.data?.isEnrolled ||
-          false;
-
-        setCourse(courseData);
-        setReviews(reviewsData);
-        setIsEnrolled(enrolledStatus); // CẬP NHẬT TRẠNG THÁI ĐÃ MUA
-      } catch (error: any) {
-        Alert.alert(
-          "Lỗi",
-          "Không thể tải chi tiết khóa học. Vui lòng thử lại sau!",
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchCourseDetail();
   }, [courseId, slug]);
 
+  // Auto refetch khi quay lại từ Payment
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isFirstMount.current) {
+        isFirstMount.current = false;
+        return;
+      }
+      console.log("🔄 Screen focused, refetching course...");
+      fetchCourseDetail();
+    }, []),
+  );
+
+  const handleBuyNow = async () => {
+    if (!course) return;
+
+    if (isEnrolled) {
+      Alert.alert("Đã sở hữu", "Bé đã có khóa học này rồi!");
+      return;
+    }
+
+    Alert.alert(
+      "Xác nhận thanh toán",
+      `Bạn muốn mua khóa học "${course.title}" với giá $${course.price}?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Đồng ý",
+          onPress: async () => {
+            try {
+              setIsProcessingPayment(true);
+
+              const paymentData = await createPayment({
+                itemType: "course",
+                itemId: course._id,
+              });
+
+              if (paymentData.success && paymentData.paymentUrl) {
+                navigation.navigate("PaymentWebview", {
+                  paymentUrl: paymentData.paymentUrl,
+                  txnRef: paymentData.txnRef,
+                  courseId: course._id,
+                });
+              } else {
+                Alert.alert(
+                  "Lỗi",
+                  "Không thể tạo thanh toán. Vui lòng thử lại!",
+                );
+              }
+            } catch (error: any) {
+              console.error("Payment error:", error);
+              console.error("Error details:", error.response?.data);
+
+              Alert.alert(
+                "Lỗi thanh toán",
+                error.response?.data?.message ||
+                  "Không thể tạo thanh toán. Vui lòng thử lại!",
+              );
+            } finally {
+              setIsProcessingPayment(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handlePressLesson = (lesson: any) => {
-    // NẾU ĐÃ MUA KHÓA HỌC, CHO PHÉP XEM TẤT CẢ VIDEO
     const isFreeOrTrial = lesson.isTrial || lesson.isFree || false;
     if (isEnrolled || isFreeOrTrial) {
-      navigation.navigate("Learning", { courseTitle: course?.title, sections: course?.sections, initialLesson: lesson });
+      navigation.navigate("Learning", {
+        courseTitle: course?.title,
+        sections: course?.sections,
+        initialLesson: lesson,
+      });
     } else {
       Alert.alert(
         "Khóa học bị khóa",
@@ -108,7 +179,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const handleAddToCart = () => {
     if (!course) return;
 
-    // CHẶN NGAY NẾU ĐÃ MUA
     if (isEnrolled) {
       Alert.alert(
         "Đã sở hữu",
@@ -149,50 +219,50 @@ export default function CourseDetailScreen({ route, navigation }: any) {
               {section.title || `Chương ${index + 1}`}
             </Text>
             {(section.lessonsId || section.lessons) &&
-              (section.lessonsId || section.lessons).map((lesson: any, lIndex: number) => {
-                // Mở khóa icon Play nếu đã mua
-                const canPlay = isEnrolled || lesson.isTrial || lesson.isFree;
-                return (
-                  <TouchableOpacity
-                    key={lesson._id || lIndex}
-                    style={styles.lessonItem}
-                    onPress={() => handlePressLesson(lesson)}
-                  >
-                    <View style={styles.lessonLeft}>
-                      <View
-                        style={[
-                          styles.iconBox,
-                          canPlay ? styles.iconBoxFree : styles.iconBoxLocked,
-                        ]}
-                      >
-                        <Ionicons
-                          name={canPlay ? "play" : "lock-closed"}
-                          size={16}
-                          color={canPlay ? "#00B894" : "#B2BEC3"}
-                        />
+              (section.lessonsId || section.lessons).map(
+                (lesson: any, lIndex: number) => {
+                  const canPlay = isEnrolled || lesson.isTrial || lesson.isFree;
+                  return (
+                    <TouchableOpacity
+                      key={lesson._id || lIndex}
+                      style={styles.lessonItem}
+                      onPress={() => handlePressLesson(lesson)}
+                    >
+                      <View style={styles.lessonLeft}>
+                        <View
+                          style={[
+                            styles.iconBox,
+                            canPlay ? styles.iconBoxFree : styles.iconBoxLocked,
+                          ]}
+                        >
+                          <Ionicons
+                            name={canPlay ? "play" : "lock-closed"}
+                            size={16}
+                            color={canPlay ? "#00B894" : "#B2BEC3"}
+                          />
+                        </View>
+                        <Text
+                          style={[
+                            styles.lessonTitle,
+                            !canPlay && { color: "#B2BEC3" },
+                          ]}
+                        >
+                          {lesson.title || `Bài học ${lIndex + 1}`}
+                        </Text>
                       </View>
-                      <Text
-                        style={[
-                          styles.lessonTitle,
-                          !canPlay && { color: "#B2BEC3" },
-                        ]}
-                      >
-                        {lesson.title || `Bài học ${lIndex + 1}`}
+                      <Text style={styles.lessonDuration}>
+                        {lesson.duration || "0"}m
                       </Text>
-                    </View>
-                    <Text style={styles.lessonDuration}>
-                      {lesson.duration || "0"}m
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                    </TouchableOpacity>
+                  );
+                },
+              )}
           </View>
         ))}
       </View>
     );
   };
 
-  // ... (renderInstructor và renderReviews GIỮ NGUYÊN)
   const renderInstructor = () => {
     const instructor = course?.instructor;
     if (!instructor)
@@ -393,34 +463,53 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={[
-            styles.buyButton,
-            isEnrolled && { backgroundColor: "#0984E3", marginRight: 0 },
-          ]}
-          onPress={
-            isEnrolled
-              ? () => navigation.navigate("Learning", { courseTitle: course?.title, sections: course?.sections })
-              : handleAddToCart
-          }
-        >
-          <Text style={styles.buyButtonText}>
-            {isEnrolled ? "Vào học ngay 🚀" : "Mua Khóa Học"}
-          </Text>
-        </TouchableOpacity>
         {!isEnrolled && (
+          <View style={styles.buttonRow}>
+            {/* Nút Thêm vào Giỏ hàng */}
+            <TouchableOpacity
+              style={[
+                styles.secondaryButton,
+                alreadyInCart && { opacity: 0.6 },
+              ]}
+              onPress={handleAddToCart}
+              disabled={alreadyInCart}
+            >
+              <Ionicons name="cart-outline" size={20} color="#FF8A80" />
+              <Text style={styles.secondaryButtonText}>
+                {alreadyInCart ? "Đã có" : "Giỏ hàng"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Nút Mua ngay */}
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                isProcessingPayment && { opacity: 0.6 },
+              ]}
+              onPress={handleBuyNow}
+              disabled={isProcessingPayment}
+            >
+              <Text style={styles.primaryButtonText}>
+                {isProcessingPayment
+                  ? "Đang xử lý..."
+                  : `Mua ngay - $${course.price}`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Nút Vào học ngay khi đã mua */}
+        {isEnrolled && (
           <TouchableOpacity
-            style={[
-              styles.cartIconButton,
-              alreadyInCart && { backgroundColor: "#E8F5E9", borderColor: "#4CD137" },
-            ]}
-            onPress={handleAddToCart}
+            style={styles.enrolledButton}
+            onPress={() =>
+              navigation.navigate("Learning", {
+                courseTitle: course?.title,
+                sections: course?.sections,
+              })
+            }
           >
-            <Ionicons
-              name={alreadyInCart ? "cart" : "cart-outline"}
-              size={28}
-              color={alreadyInCart ? "#4CD137" : "#FF8A80"}
-            />
+            <Text style={styles.buyButtonText}>Vào học ngay 🚀</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -428,7 +517,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   );
 }
 
-// ... (Giữ nguyên phần styles cũ, không thay đổi)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FDFBF7" },
   loadingContainer: {
@@ -586,6 +674,7 @@ const styles = StyleSheet.create({
   reviewUser: { fontSize: 15, fontWeight: "bold", color: "#37474F" },
   starsRow: { flexDirection: "row" },
   reviewComment: { fontSize: 14, color: "#78909C", lineHeight: 20 },
+  // Sửa lại styles (thay thế từ dòng 570-626):
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -595,12 +684,57 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    flexDirection: "row",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -5 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 10,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    gap: 10,
+  },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: "#FF8A80",
+    gap: 6,
+  },
+  secondaryButtonText: {
+    color: "#FF8A80",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  primaryButton: {
+    flex: 2,
+    backgroundColor: "#FF8A80",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryButtonText: {
+    color: "#FFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  enrolledButton: {
+    backgroundColor: "#0984E3",
+    padding: 16,
+    borderRadius: 25,
+    alignItems: "center",
+    width: "100%",
   },
   cartIconButton: {
     width: 56,
