@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context"; // MỚI THÊM VÀO
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 
@@ -18,54 +19,32 @@ export default function MyCoursesScreen({ navigation }: any) {
   const fetchMyCourses = async () => {
     try {
       setLoading(true);
-      console.log("⏳ Đang lấy danh sách khóa học của bé...");
-
       const response = await axiosClient.get("/auth/me");
-
-      // Lấy danh sách ID khóa học đã đăng ký
       const userData =
         response.data?.data?.user || response.data?.user || response.data;
       const enrolledList = userData?.enrolledCourses || [];
 
       if (enrolledList.length > 0) {
-        console.log(
-          `🔍 Tìm thấy ${enrolledList.length} ID khóa học. Đang tải chi tiết...`,
-        );
-
-        // Dùng Promise.all để gọi API lấy chi tiết của tất cả khóa học CÙNG MỘT LÚC
         const coursePromises = enrolledList.map(async (item: any) => {
-          // Lấy ID khóa học (tùy Backend trả về object hay string)
           const courseId =
             typeof item.course === "string"
               ? item.course
               : item.course?._id || item;
-
           try {
-            // Gọi API lấy thông tin chi tiết của khóa học đó
             const detailRes = await axiosClient.get(`/courses/${courseId}`);
             const courseData =
               detailRes.data?.course || detailRes.data?.data || detailRes.data;
-
-            // Trả về khóa học kèm theo tiến độ học (progress)
-            return {
-              ...courseData,
-              progress: item.progress || 0,
-            };
+            return { ...courseData, progress: item.progress || 0 };
           } catch (err) {
-            console.log(`⚠️ Bỏ qua khóa học bị lỗi ID: ${courseId}`);
             return null;
           }
         });
 
-        // Chờ tất cả API tải xong thông tin và lọc bỏ những cái bị lỗi
         const fullCourses = (await Promise.all(coursePromises)).filter(
           (c) => c !== null,
         );
-
-        console.log(`✅ Đã tải xong thông tin ${fullCourses.length} khóa học!`);
         setMyCourses(fullCourses);
       } else {
-        // Nếu mảng rỗng thì set mảng rỗng
         setMyCourses([]);
       }
     } catch (error: any) {
@@ -74,18 +53,15 @@ export default function MyCoursesScreen({ navigation }: any) {
       setLoading(false);
     }
   };
-  // CỰC KỲ QUAN TRỌNG: Dùng 'focus' để mỗi lần bấm vào Tab Bàn Học nó đều gọi lại API để làm mới dữ liệu
+
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
       fetchMyCourses();
     });
-
     return unsubscribe;
   }, [navigation]);
 
   const renderCourseItem = ({ item }: { item: any }) => {
-    // Nếu Backend trả về chỉ ID (string) thay vì object khóa học thì ta xử lý phòng hờ,
-    // nhưng thông thường backend sẽ populate (điền đầy đủ thông tin khóa học vào)
     const courseId = item._id || item.course?._id || item;
     const title = item.title || item.course?.title || "Khóa học nghệ thuật";
     const thumbnail =
@@ -97,25 +73,21 @@ export default function MyCoursesScreen({ navigation }: any) {
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.9}
-        // Truyền thẳng courseId sang trang Chi tiết để bé vào học
         onPress={() =>
           navigation.navigate("CourseDetail", { courseId: courseId })
         }
       >
         <Image source={{ uri: thumbnail }} style={styles.thumbnail} />
-
         <View style={styles.infoBox}>
           <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
-
           <View style={styles.progressRow}>
             <View style={styles.progressBarBg}>
               <View style={[styles.progressBarFill, { width: "0%" }]} />
             </View>
             <Text style={styles.progressText}>0%</Text>
           </View>
-
           <TouchableOpacity
             style={styles.studyButton}
             onPress={() =>
@@ -130,7 +102,7 @@ export default function MyCoursesScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#00B894" />
@@ -159,10 +131,9 @@ export default function MyCoursesScreen({ navigation }: any) {
               <Text style={styles.emptySubText}>
                 Bé hãy nhờ bố mẹ mua khóa học để bắt đầu nhé!
               </Text>
-
               <TouchableOpacity
                 style={styles.exploreButton}
-                onPress={() => navigation.navigate("Home")}
+                onPress={() => navigation.navigate("HomeTab")}
               >
                 <Text style={styles.exploreButtonText}>Đi khám phá ngay</Text>
               </TouchableOpacity>
@@ -170,23 +141,14 @@ export default function MyCoursesScreen({ navigation }: any) {
           }
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FDFBF7" },
-  header: { padding: 20, paddingTop: 10 },
-  headerTitle: { fontSize: 26, fontWeight: "900", color: "#00B894" },
-  headerSubtitle: {
-    fontSize: 15,
-    color: "#55E6C1",
-    marginTop: 5,
-    fontWeight: "600",
-  },
   centerContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  listContainer: { paddingHorizontal: 20, paddingBottom: 30 },
-
+  listContainer: { paddingHorizontal: 20, paddingBottom: 30, paddingTop: 10 },
   card: {
     flexDirection: "row",
     backgroundColor: "#FFF",
@@ -213,7 +175,6 @@ const styles = StyleSheet.create({
     color: "#37474F",
     marginBottom: 8,
   },
-
   progressRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
   progressBarBg: {
     flex: 1,
@@ -229,7 +190,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   progressText: { fontSize: 12, fontWeight: "bold", color: "#00B894" },
-
   studyButton: {
     backgroundColor: "#E8F5E9",
     paddingVertical: 8,
@@ -237,7 +197,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   studyButtonText: { color: "#00B894", fontWeight: "bold", fontSize: 14 },
-
   emptyBox: { alignItems: "center", marginTop: 60 },
   emptyIcon: { width: 120, height: 120, opacity: 0.8, marginBottom: 15 },
   emptyText: {

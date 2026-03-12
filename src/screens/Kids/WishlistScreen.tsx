@@ -7,16 +7,16 @@ import {
   Image,
   TouchableOpacity,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context"; // MỚI THÊM VÀO
 import { Ionicons } from "@expo/vector-icons";
-import { useShopStore } from "../../store/useShopStore"; // <-- IMPORT KHO CHỨA
+import { useShopStore } from "../../store/useShopStore";
 
 export default function WishlistScreen({ navigation }: any) {
-  // Lấy danh sách yêu thích và hàm xóa khỏi kho chứa
   const wishlist = useShopStore((state) => state.wishlist);
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
 
   const handleUnlike = (course: any) => {
-    toggleWishlist(course); // Bấm lần 2 là tự động xóa khỏi mảng
+    toggleWishlist(course);
   };
 
   const renderWishlistItem = ({ item }: { item: any }) => (
@@ -35,7 +35,6 @@ export default function WishlistScreen({ navigation }: any) {
         }}
         style={styles.thumbnail}
       />
-
       <View style={styles.infoBox}>
         <Text style={styles.title} numberOfLines={2}>
           {item.title}
@@ -44,7 +43,6 @@ export default function WishlistScreen({ navigation }: any) {
           {item.price === 0 ? "Miễn phí" : `$${item.price}`}
         </Text>
       </View>
-
       <TouchableOpacity
         onPress={() => handleUnlike(item)}
         style={styles.heartButton}
@@ -55,7 +53,10 @@ export default function WishlistScreen({ navigation }: any) {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Yêu thích của bé 💖</Text>
+      </View>
       <FlatList
         data={wishlist}
         keyExtractor={(item) => item._id || Math.random().toString()}
@@ -71,19 +72,18 @@ export default function WishlistScreen({ navigation }: any) {
           </View>
         }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FDFBF7" },
-  header: { padding: 20, paddingTop: 10 },
-  headerTitle: { fontSize: 26, fontWeight: "900", color: "#D81B60" },
-  headerSubtitle: {
-    fontSize: 15,
-    color: "#F06292",
-    marginTop: 5,
-    fontWeight: "600",
+  header: { padding: 20, paddingTop: 10, paddingBottom: 15 },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: "#D81B60",
+    textAlign: "center",
   },
   listContainer: { paddingHorizontal: 20, paddingBottom: 30 },
   card: {

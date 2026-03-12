@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { DrawerActions } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
@@ -21,8 +22,6 @@ export default function ComboDetailScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(false);
 
-  // Lưu ý: Tùy thuôc vào backend, giỏ hàng có hỗ trợ combo không
-  // Ở đây giả sử giỏ hàng hỗ trợ các loại khóa học học combo chung
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
   const isInWishlist = useShopStore((state) => state.isInWishlist);
   const addToCart = useShopStore((state) => state.addToCart);
@@ -34,14 +33,11 @@ export default function ComboDetailScreen({ route, navigation }: any) {
   useEffect(() => {
     const fetchComboDetail = async () => {
       if (!comboId && !slug) return;
-
       try {
         setLoading(true);
         const fetchIdentifier = slug || comboId;
-
         const [comboRes, enrollCheckRes] = await Promise.all([
           axiosClient.get(`/combos/${fetchIdentifier}`),
-          // Giả sử API check enroll cho combo là như check course, nếu chưa có thì bắt false
           axiosClient
             .get(`/users/enroll/${comboId || slug}/check`)
             .catch(() => ({ data: { isEnrolled: false } })),
@@ -66,13 +62,11 @@ export default function ComboDetailScreen({ route, navigation }: any) {
         setLoading(false);
       }
     };
-
     fetchComboDetail();
   }, [comboId, slug]);
 
   const handleToggleWishlist = () => {
     if (!combo) return;
-    // Tạm thời coi combo như course để dùng trong wishlist (cần store hỗ trợ)
     toggleWishlist(combo);
     if (!isLiked)
       Alert.alert("Yêu thích 💖", "Đã thêm Combo vào danh sách Yêu thích!");
@@ -80,7 +74,6 @@ export default function ComboDetailScreen({ route, navigation }: any) {
 
   const handleAddToCart = () => {
     if (!combo) return;
-
     if (isEnrolled) {
       Alert.alert(
         "Đã sở hữu",
@@ -88,7 +81,6 @@ export default function ComboDetailScreen({ route, navigation }: any) {
       );
       return;
     }
-
     if (alreadyInCart) {
       Alert.alert("Giỏ hàng", "Combo này đã có trong giỏ hàng rồi nhé!", [
         { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
@@ -96,22 +88,16 @@ export default function ComboDetailScreen({ route, navigation }: any) {
       ]);
       return;
     }
-
     addToCart({ ...combo, isCombo: true });
-    Alert.alert(
-      "Thành công! 🛒",
-      "Đã thêm Combo vào Giỏ hàng của phụ huynh!",
-      [
-        { text: "Ở lại trang", style: "cancel" },
-        { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
-      ],
-    );
+    Alert.alert("Thành công! 🛒", "Đã thêm Combo vào Giỏ hàng của phụ huynh!", [
+      { text: "Ở lại trang", style: "cancel" },
+      { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
+    ]);
   };
 
   const renderCourses = () => {
     if (!combo?.courses || combo.courses.length === 0)
       return <Text style={styles.emptyText}>Combo chưa có khóa học nào.</Text>;
-
     return (
       <View style={styles.tabContent}>
         <Text style={styles.sectionTitle}>Các khóa học trong Combo</Text>
@@ -184,22 +170,33 @@ export default function ComboDetailScreen({ route, navigation }: any) {
             style={styles.thumbnail}
           />
           <SafeAreaView style={styles.floatingHeader}>
+            {/* CỤM NÚT TRÁI (Nút Quay lại) */}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => navigation.goBack()}
             >
               <Ionicons name="chevron-back" size={24} color="#37474F" />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={handleToggleWishlist}
-            >
-              <Ionicons
-                name={isLiked ? "heart" : "heart-outline"}
-                size={24}
-                color="#FF5252"
-              />
-            </TouchableOpacity>
+
+            {/* CỤM NÚT PHẢI (Menu + Trái tim) */}
+            <View style={{ flexDirection: "row" }}>
+              <TouchableOpacity
+                style={[styles.iconButton, { marginRight: 10 }]}
+                onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+              >
+                <Ionicons name="menu" size={24} color="#37474F" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={handleToggleWishlist}
+              >
+                <Ionicons
+                  name={isLiked ? "heart" : "heart-outline"}
+                  size={24}
+                  color="#FF5252"
+                />
+              </TouchableOpacity>
+            </View>
           </SafeAreaView>
         </View>
 
@@ -209,7 +206,10 @@ export default function ComboDetailScreen({ route, navigation }: any) {
           <View style={styles.statsRow}>
             {combo.oldPrice > 0 && (
               <Text style={styles.oldPrice}>
-                {(combo.oldPrice || combo.originalPrice)?.toLocaleString("vi-VN")} đ
+                {(combo.oldPrice || combo.originalPrice)?.toLocaleString(
+                  "vi-VN",
+                )}{" "}
+                đ
               </Text>
             )}
             <Text style={styles.price}>
@@ -231,7 +231,7 @@ export default function ComboDetailScreen({ route, navigation }: any) {
           ]}
           onPress={
             isEnrolled
-              ? () => navigation.navigate("DrawerMain", { screen: "MyCourses" })
+              ? () => navigation.navigate("Tabs", { screen: "MyCoursesTab" })
               : handleAddToCart
           }
         >
@@ -243,7 +243,10 @@ export default function ComboDetailScreen({ route, navigation }: any) {
           <TouchableOpacity
             style={[
               styles.cartIconButton,
-              alreadyInCart && { backgroundColor: "#E8F5E9", borderColor: "#4CD137" },
+              alreadyInCart && {
+                backgroundColor: "#E8F5E9",
+                borderColor: "#4CD137",
+              },
             ]}
             onPress={handleAddToCart}
           >
