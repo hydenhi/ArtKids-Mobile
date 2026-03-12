@@ -89,7 +89,7 @@ export default function CourseDetailScreen({ route, navigation }: any) {
     // NẾU ĐÃ MUA KHÓA HỌC, CHO PHÉP XEM TẤT CẢ VIDEO
     const isFreeOrTrial = lesson.isTrial || lesson.isFree || false;
     if (isEnrolled || isFreeOrTrial) {
-      Alert.alert("Vào học", `Đang mở video: ${lesson.title} ▶️`);
+      navigation.navigate("Learning", { courseTitle: course?.title, sections: course?.sections, initialLesson: lesson });
     } else {
       Alert.alert(
         "Khóa học bị khóa",
@@ -148,8 +148,8 @@ export default function CourseDetailScreen({ route, navigation }: any) {
             <Text style={styles.sectionTitle}>
               {section.title || `Chương ${index + 1}`}
             </Text>
-            {section.lessons &&
-              section.lessons.map((lesson: any, lIndex: number) => {
+            {(section.lessonsId || section.lessons) &&
+              (section.lessonsId || section.lessons).map((lesson: any, lIndex: number) => {
                 // Mở khóa icon Play nếu đã mua
                 const canPlay = isEnrolled || lesson.isTrial || lesson.isFree;
                 return (
@@ -393,27 +393,36 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        {/* NÚT BẤM THÔNG MINH ĐỔI TRẠNG THÁI */}
         <TouchableOpacity
           style={[
             styles.buyButton,
-            alreadyInCart && { backgroundColor: "#4CD137" },
-            isEnrolled && { backgroundColor: "#0984E3" }, // Đổi màu xanh dương nếu đã mua
+            isEnrolled && { backgroundColor: "#0984E3", marginRight: 0 },
           ]}
           onPress={
             isEnrolled
-              ? () => navigation.navigate("DrawerMain", { screen: "MyCourses" })
+              ? () => navigation.navigate("Learning", { courseTitle: course?.title, sections: course?.sections })
               : handleAddToCart
           }
         >
           <Text style={styles.buyButtonText}>
-            {isEnrolled
-              ? "Vào học ngay 🚀"
-              : alreadyInCart
-                ? "Đã có trong giỏ hàng ✓"
-                : "Thêm vào Giỏ Hàng"}
+            {isEnrolled ? "Vào học ngay 🚀" : "Mua Khóa Học"}
           </Text>
         </TouchableOpacity>
+        {!isEnrolled && (
+          <TouchableOpacity
+            style={[
+              styles.cartIconButton,
+              alreadyInCart && { backgroundColor: "#E8F5E9", borderColor: "#4CD137" },
+            ]}
+            onPress={handleAddToCart}
+          >
+            <Ionicons
+              name={alreadyInCart ? "cart" : "cart-outline"}
+              size={28}
+              color={alreadyInCart ? "#4CD137" : "#FF8A80"}
+            />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -586,16 +595,30 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
+    flexDirection: "row",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -5 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 10,
   },
+  cartIconButton: {
+    width: 56,
+    height: 56,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: "#FF8A80",
+    backgroundColor: "#FFF",
+    marginLeft: 15,
+  },
   buyButton: {
+    flex: 1,
     backgroundColor: "#FF8A80",
-    padding: 16,
+    paddingVertical: 16,
     borderRadius: 25,
+    justifyContent: "center",
     alignItems: "center",
   },
   buyButtonText: { color: "#FFF", fontSize: 18, fontWeight: "900" },
