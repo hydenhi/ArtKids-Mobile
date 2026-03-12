@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native"; // THÊM IMPORT NÀY
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
-import { createPayment } from "../../api/paymentService";
+import { createPayment, checkCourseInCart } from "../../api/paymentService";
 
 export default function ComboDetailScreen({ route, navigation }: any) {
   const { comboId, slug } = route.params || {};
@@ -154,7 +154,11 @@ export default function ComboDetailScreen({ route, navigation }: any) {
       return;
     }
 
-    addToCart({ ...combo, isCombo: true });
+    // ✅ Call addToCart and handle result immediately
+    const result = addToCart({ ...combo, isCombo: true });
+
+    // Note: result is a Promise, but we can show alert immediately
+    // Backend sync happens in background
     Alert.alert("Thành công! 🛒", "Đã thêm Combo vào Giỏ hàng của phụ huynh!", [
       { text: "Ở lại trang", style: "cancel" },
       { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },

@@ -12,8 +12,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useShopStore } from "../../store/useShopStore";
-import { createPayment } from "../../api/paymentService"; // IMPORT PAYMENT SERVICE
+import { createPayment, checkoutCart } from "../../api/paymentService";
 import CustomHeader from "../../components/CustomHeader";
+import { syncCartToBackend } from "../../api/paymentService";
 
 export default function CartScreen({ navigation }: any) {
   const cartItems = useShopStore((state) => state.cart);
@@ -31,7 +32,14 @@ export default function CartScreen({ navigation }: any) {
   const handleRemoveItem = (id: string) => {
     Alert.alert("Xóa khóa học", "Bạn có muốn bỏ khóa học này khỏi giỏ không?", [
       { text: "Hủy", style: "cancel" },
-      { text: "Xóa", style: "destructive", onPress: () => removeFromCart(id) },
+      {
+        text: "Xóa",
+        style: "destructive",
+        onPress: () => {
+          // ✅ Just call removeFromCart, don't await
+          removeFromCart(id);
+        },
+      },
     ]);
   };
 
@@ -41,99 +49,105 @@ export default function CartScreen({ navigation }: any) {
     setCoupon("");
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cartItems.length === 0) {
       Alert.alert("Giỏ hàng trống", "Hãy chọn thêm khóa học cho bé nhé!");
       return;
     }
 
+    const itemText =
+      cartItems.length === 1
+        ? "1 khóa học/combo"
+        : `${cartItems.length} khóa học/combo`;
+
     Alert.alert(
       "Xác nhận thanh toán",
-      `Bạn xác nhận thanh toán ${cartItems.length} khóa học với tổng tiền $${totalAmount.toFixed(2)}?`,
+      `Bạn xác nhận thanh toán ${itemText} với tổng tiền $${totalAmount.toFixed(2)}?`,
       [
         { text: "Hủy", style: "cancel" },
         {
           text: "Thanh toán ngay",
-          onPress: async () => {
-            try {
-              setIsCheckingOut(true);
-
-              if (cartItems.length === 1) {
-                const item = cartItems[0];
-                const itemType = item.isCombo ? "combo" : "course";
-
-                const paymentData = await createPayment({
-                  itemType: itemType,
-                  itemId: item._id,
-                });
-
-                if (paymentData.success && paymentData.paymentUrl) {
-                  navigation.navigate("PaymentWebview", {
-                    paymentUrl: paymentData.paymentUrl,
-                    txnRef: paymentData.txnRef,
-                    itemId: item._id,
-                    itemType: itemType,
-                    isFromCart: true, // Đánh dấu từ giỏ hàng để clear cart sau khi thanh toán thành công
-                  });
-                } else {
-                  Alert.alert(
-                    "Lỗi",
-                    "Không thể tạo thanh toán. Vui lòng thử lại!",
-                  );
-                }
-              } else {
-                // Nếu có nhiều items: Tạo thanh toán cho item đầu tiên
-                // (Lý tưởng nhất là backend hỗ trợ bulk checkout)
-                Alert.alert(
-                  "Thanh toán nhiều khóa học",
-                  "Hiện tại hệ thống chỉ hỗ trợ thanh toán từng khóa học một. Bạn sẽ được chuyển đến thanh toán khóa học đầu tiên.",
-                  [
-                    { text: "Hủy", style: "cancel" },
-                    {
-                      text: "Tiếp tục",
-                      onPress: async () => {
-                        const firstItem = cartItems[0];
-                        const itemType = firstItem.isCombo ? "combo" : "course";
-
-                        try {
-                          const paymentData = await createPayment({
-                            itemType: itemType,
-                            itemId: firstItem._id,
-                          });
-
-                          if (paymentData.success && paymentData.paymentUrl) {
-                            navigation.navigate("PaymentWebview", {
-                              paymentUrl: paymentData.paymentUrl,
-                              txnRef: paymentData.txnRef,
-                              itemId: firstItem._id,
-                              itemType: itemType,
-                              isFromCart: true,
-                            });
-                          }
-                        } catch (error: any) {
-                          Alert.alert(
-                            "Lỗi thanh toán",
-                            error.response?.data?.message ||
-                              "Không thể tạo thanh toán. Vui lòng thử lại!",
-                          );
-                        }
-                      },
-                    },
-                  ],
-                );
-              }
-            } catch (error: any) {
-              const errorMsg =
-                error.response?.data?.message ||
-                "Có lỗi xảy ra khi tạo thanh toán.";
-              Alert.alert("Thanh toán thất bại", errorMsg);
-            } finally {
-              setIsCheckingOut(false);
-            }
-          },
+          onPress: () => proceedCheckout(),
         },
       ],
     );
+  };
+
+  const proceedCheckout = async () => {
+    try {
+      setIsCheckingOut(true);
+
+      if (cartItems.length > 0) {
+        console.log("📤 Syncing cart to backend before checkout...");
+        try {
+          await syncCartToBackend(cartItems);
+        } catch (syncError: any) {
+          console.error("❌ Cart sync failed:", syncError);
+          Alert.alert(
+            "Lỗi đồng bộ giỏ hàng",
+            "Không thể đồng bộ giỏ hàng với server. Vui lòng thử lại!",
+          );
+          setIsCheckingOut(false);
+          return;
+        }
+      }
+
+      // ✅ Call checkout API
+      const paymentData = await checkoutCart();
+
+      if (!paymentData.success) {
+        Alert.alert(
+          "Lỗi",
+          paymentData.message || "Không thể tạo thanh toán. Vui lòng thử lại!",
+        );
+        return;
+      }
+
+      // Handle free flow
+      if (paymentData.flow === "free") {
+        clearCart();
+        Alert.alert(
+          "Đăng ký thành công! 🎉",
+          "Tất cả khóa học miễn phí đã được thêm vào Bàn học của bé.",
+          [
+            {
+              text: "Tuyệt vời",
+              onPress: () => {
+                navigation.navigate("DrawerMain", { screen: "MyCourses" });
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      // Handle vnpay flow
+      if (paymentData.flow === "vnpay" && paymentData.paymentUrl) {
+        const cartItemIds = cartItems.map((item) => item._id);
+
+        navigation.navigate("PaymentWebview", {
+          paymentUrl: paymentData.paymentUrl,
+          txnRef: paymentData.txnRef,
+          itemIds: cartItemIds,
+          isFromCart: true,
+          isBulkCheckout: true,
+          itemCount: cartItems.length,
+        });
+        return;
+      }
+
+      Alert.alert("Lỗi", "Phản hồi thanh toán không hợp lệ.");
+    } catch (error: any) {
+      console.error("Checkout error:", error);
+      console.error("Error response:", error.response?.data);
+
+      const errorMsg =
+        error.response?.data?.message ||
+        "Có lỗi xảy ra khi tạo thanh toán. Vui lòng thử lại!";
+      Alert.alert("Thanh toán thất bại", errorMsg);
+    } finally {
+      setIsCheckingOut(false);
+    }
   };
 
   const renderCartItem = ({ item }: { item: any }) => (
