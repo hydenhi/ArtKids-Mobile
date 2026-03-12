@@ -6,7 +6,6 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,6 +13,9 @@ import { DrawerActions } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
+
+// IMPORT CUSTOM TOAST VỪA TẠO
+import CustomToast from "../../components/CustomToast";
 
 export default function CourseDetailScreen({ route, navigation }: any) {
   const { courseId, slug } = route.params || {};
@@ -24,13 +26,33 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(false);
 
+  // STATE ĐỂ QUẢN LÝ THÔNG BÁO (TOAST)
+  const [toast, setToast] = useState({
+    visible: false,
+    message: "",
+    type: "success" as any,
+  });
+
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
   const isInWishlist = useShopStore((state) => state.isInWishlist);
   const addToCart = useShopStore((state) => state.addToCart);
+  // IMPORT THÊM HÀM XÓA KHỎI GIỎ HÀNG TỪ STORE
+  const removeFromCart = useShopStore((state) => state.removeFromCart);
   const isInCart = useShopStore((state) => state.isInCart);
 
   const isLiked = course ? isInWishlist(course._id) : false;
   const alreadyInCart = course ? isInCart(course._id) : false;
+
+  // HÀM HIỂN THỊ TOAST TỰ ẨN SAU 2 GIÂY
+  const showToast = (
+    message: string,
+    type: "success" | "info" | "warning" = "success",
+  ) => {
+    setToast({ visible: true, message, type });
+    setTimeout(() => {
+      setToast((prev) => ({ ...prev, visible: false }));
+    }, 2000);
+  };
 
   useEffect(() => {
     const fetchCourseDetail = async () => {
@@ -66,10 +88,7 @@ export default function CourseDetailScreen({ route, navigation }: any) {
         setReviews(reviewsData);
         setIsEnrolled(enrolledStatus);
       } catch (error: any) {
-        Alert.alert(
-          "Lỗi",
-          "Không thể tải chi tiết khóa học. Vui lòng thử lại sau!",
-        );
+        showToast("Không thể tải chi tiết khóa học!", "warning");
       } finally {
         setLoading(false);
       }
@@ -86,45 +105,37 @@ export default function CourseDetailScreen({ route, navigation }: any) {
         initialLesson: lesson,
       });
     } else {
-      Alert.alert(
-        "Khóa học bị khóa",
-        "Bé hãy nhờ bố mẹ mua khóa học để xem bài này nhé! 🔒",
-      );
+      showToast("Khóa học bị khóa. Bố mẹ hãy mua để bé học nhé! 🔒", "warning");
     }
   };
 
   const handleToggleWishlist = () => {
     if (!course) return;
     toggleWishlist(course);
-    if (!isLiked)
-      Alert.alert("Yêu thích 💖", "Đã thêm khóa học vào danh sách Yêu thích!");
+    if (!isLiked) {
+      showToast("Đã thêm vào danh sách Yêu thích! ", "success");
+    } else {
+      showToast("Đã bỏ khỏi danh sách Yêu thích ", "info");
+    }
   };
 
-  const handleAddToCart = () => {
+  const handleToggleCart = () => {
     if (!course) return;
+
+    // Nếu đã mua rồi thì báo lỗi
     if (isEnrolled) {
-      Alert.alert(
-        "Đã sở hữu",
-        "Bé đã có khóa học này rồi, hãy vào Bàn học để xem nhé!",
-      );
+      showToast("Bé đã có khóa học này trong bàn học rồi!", "warning");
       return;
     }
+
+    // NẾU ĐÃ CÓ TRONG GIỎ THÌ XÓA, NẾU CHƯA CÓ THÌ THÊM
     if (alreadyInCart) {
-      Alert.alert("Giỏ hàng", "Khóa học này đã có trong giỏ hàng rồi nhé!", [
-        { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
-        { text: "Ở lại", style: "cancel" },
-      ]);
-      return;
+      removeFromCart(course._id);
+      showToast("Đã bỏ khóa học khỏi Giỏ hàng 🗑️", "info");
+    } else {
+      addToCart(course);
+      showToast("Đã thêm vào Giỏ hàng! 🛒", "success");
     }
-    addToCart(course);
-    Alert.alert(
-      "Thành công! 🛒",
-      "Đã thêm khóa học vào Giỏ hàng của phụ huynh!",
-      [
-        { text: "Ở lại trang", style: "cancel" },
-        { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
-      ],
-    );
   };
 
   const renderCurriculum = () => {
@@ -280,6 +291,13 @@ export default function CourseDetailScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
+      {/* HIỂN THỊ TOAST Ở TRÊN CÙNG */}
+      <CustomToast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+      />
+
       <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
         <View style={styles.headerImageContainer}>
           <Image
@@ -291,7 +309,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
             style={styles.thumbnail}
           />
           <SafeAreaView style={styles.floatingHeader}>
-            {/* CỤM NÚT TRÁI (Nút Quay lại) */}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => navigation.goBack()}
@@ -299,7 +316,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
               <Ionicons name="chevron-back" size={24} color="#37474F" />
             </TouchableOpacity>
 
-            {/* CỤM NÚT PHẢI (Menu + Trái tim) */}
             <View style={{ flexDirection: "row" }}>
               <TouchableOpacity
                 style={[styles.iconButton, { marginRight: 10 }]}
@@ -408,28 +424,29 @@ export default function CourseDetailScreen({ route, navigation }: any) {
                     courseTitle: course?.title,
                     sections: course?.sections,
                   })
-              : handleAddToCart
+              : handleToggleCart
           }
         >
           <Text style={styles.buyButtonText}>
-            {isEnrolled ? "Vào học ngay 🚀" : "Mua Khóa Học"}
+            {isEnrolled ? "Vào học ngay " : "Mua Khóa Học"}
           </Text>
         </TouchableOpacity>
         {!isEnrolled && (
+          // Đã sửa lại logic nút này: Bấm vào gọi handleToggleCart để Thêm/Xóa
           <TouchableOpacity
             style={[
               styles.cartIconButton,
               alreadyInCart && {
-                backgroundColor: "#E8F5E9",
-                borderColor: "#4CD137",
+                backgroundColor: "#FFEBEE",
+                borderColor: "#D63031",
               },
             ]}
-            onPress={handleAddToCart}
+            onPress={handleToggleCart}
           >
             <Ionicons
-              name={alreadyInCart ? "cart" : "cart-outline"}
+              name={alreadyInCart ? "trash" : "cart-outline"}
               size={28}
-              color={alreadyInCart ? "#4CD137" : "#FF8A80"}
+              color={alreadyInCart ? "#D63031" : "#FF8A80"}
             />
           </TouchableOpacity>
         )}
