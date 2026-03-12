@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { DrawerActions } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
@@ -21,8 +22,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const [course, setCourse] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // STATE MỚI: KIỂM TRA ĐÃ MUA KHÓA HỌC CHƯA
   const [isEnrolled, setIsEnrolled] = useState(false);
 
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
@@ -36,19 +35,15 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   useEffect(() => {
     const fetchCourseDetail = async () => {
       if (!courseId && !slug) return;
-
       try {
         setLoading(true);
         const fetchIdentifier = slug || courseId;
-        const validCourseId = courseId || slug; // Dùng id hoặc slug để check enroll
-
-        // Gọi 3 API CÙNG LÚC: Chi tiết, Đánh giá, và Check Đã Mua
+        const validCourseId = courseId || slug;
         const [courseRes, reviewRes, enrollCheckRes] = await Promise.all([
           axiosClient.get(`/courses/${fetchIdentifier}`),
           axiosClient
             .get(`/reviews/course/${validCourseId}`)
             .catch(() => ({ data: [] })),
-          // Dùng catch để lỡ chưa đăng nhập hoặc chưa mua thì API trả lỗi, ta mặc định là false
           axiosClient
             .get(`/users/enroll/${validCourseId}/check`)
             .catch(() => ({ data: { isEnrolled: false } })),
@@ -61,8 +56,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
           reviewRes.data?.data ||
           reviewRes.data ||
           [];
-
-        // Thích ứng tùy theo Backend trả về {isEnrolled: true} hay {enrolled: true} hay status 200
         const enrolledStatus =
           enrollCheckRes.data?.isEnrolled ||
           enrollCheckRes.data?.enrolled ||
@@ -71,7 +64,7 @@ export default function CourseDetailScreen({ route, navigation }: any) {
 
         setCourse(courseData);
         setReviews(reviewsData);
-        setIsEnrolled(enrolledStatus); // CẬP NHẬT TRẠNG THÁI ĐÃ MUA
+        setIsEnrolled(enrolledStatus);
       } catch (error: any) {
         Alert.alert(
           "Lỗi",
@@ -81,15 +74,17 @@ export default function CourseDetailScreen({ route, navigation }: any) {
         setLoading(false);
       }
     };
-
     fetchCourseDetail();
   }, [courseId, slug]);
 
   const handlePressLesson = (lesson: any) => {
-    // NẾU ĐÃ MUA KHÓA HỌC, CHO PHÉP XEM TẤT CẢ VIDEO
     const isFreeOrTrial = lesson.isTrial || lesson.isFree || false;
     if (isEnrolled || isFreeOrTrial) {
-      navigation.navigate("Learning", { courseTitle: course?.title, sections: course?.sections, initialLesson: lesson });
+      navigation.navigate("Learning", {
+        courseTitle: course?.title,
+        sections: course?.sections,
+        initialLesson: lesson,
+      });
     } else {
       Alert.alert(
         "Khóa học bị khóa",
@@ -107,8 +102,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
 
   const handleAddToCart = () => {
     if (!course) return;
-
-    // CHẶN NGAY NẾU ĐÃ MUA
     if (isEnrolled) {
       Alert.alert(
         "Đã sở hữu",
@@ -116,7 +109,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       );
       return;
     }
-
     if (alreadyInCart) {
       Alert.alert("Giỏ hàng", "Khóa học này đã có trong giỏ hàng rồi nhé!", [
         { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
@@ -124,7 +116,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       ]);
       return;
     }
-
     addToCart(course);
     Alert.alert(
       "Thành công! 🛒",
@@ -149,50 +140,50 @@ export default function CourseDetailScreen({ route, navigation }: any) {
               {section.title || `Chương ${index + 1}`}
             </Text>
             {(section.lessonsId || section.lessons) &&
-              (section.lessonsId || section.lessons).map((lesson: any, lIndex: number) => {
-                // Mở khóa icon Play nếu đã mua
-                const canPlay = isEnrolled || lesson.isTrial || lesson.isFree;
-                return (
-                  <TouchableOpacity
-                    key={lesson._id || lIndex}
-                    style={styles.lessonItem}
-                    onPress={() => handlePressLesson(lesson)}
-                  >
-                    <View style={styles.lessonLeft}>
-                      <View
-                        style={[
-                          styles.iconBox,
-                          canPlay ? styles.iconBoxFree : styles.iconBoxLocked,
-                        ]}
-                      >
-                        <Ionicons
-                          name={canPlay ? "play" : "lock-closed"}
-                          size={16}
-                          color={canPlay ? "#00B894" : "#B2BEC3"}
-                        />
+              (section.lessonsId || section.lessons).map(
+                (lesson: any, lIndex: number) => {
+                  const canPlay = isEnrolled || lesson.isTrial || lesson.isFree;
+                  return (
+                    <TouchableOpacity
+                      key={lesson._id || lIndex}
+                      style={styles.lessonItem}
+                      onPress={() => handlePressLesson(lesson)}
+                    >
+                      <View style={styles.lessonLeft}>
+                        <View
+                          style={[
+                            styles.iconBox,
+                            canPlay ? styles.iconBoxFree : styles.iconBoxLocked,
+                          ]}
+                        >
+                          <Ionicons
+                            name={canPlay ? "play" : "lock-closed"}
+                            size={16}
+                            color={canPlay ? "#00B894" : "#B2BEC3"}
+                          />
+                        </View>
+                        <Text
+                          style={[
+                            styles.lessonTitle,
+                            !canPlay && { color: "#B2BEC3" },
+                          ]}
+                        >
+                          {lesson.title || `Bài học ${lIndex + 1}`}
+                        </Text>
                       </View>
-                      <Text
-                        style={[
-                          styles.lessonTitle,
-                          !canPlay && { color: "#B2BEC3" },
-                        ]}
-                      >
-                        {lesson.title || `Bài học ${lIndex + 1}`}
+                      <Text style={styles.lessonDuration}>
+                        {lesson.duration || "0"}m
                       </Text>
-                    </View>
-                    <Text style={styles.lessonDuration}>
-                      {lesson.duration || "0"}m
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                    </TouchableOpacity>
+                  );
+                },
+              )}
           </View>
         ))}
       </View>
     );
   };
 
-  // ... (renderInstructor và renderReviews GIỮ NGUYÊN)
   const renderInstructor = () => {
     const instructor = course?.instructor;
     if (!instructor)
@@ -266,6 +257,7 @@ export default function CourseDetailScreen({ route, navigation }: any) {
         </Text>
       </View>
     );
+
   if (!course)
     return (
       <View style={styles.loadingContainer}>
@@ -299,22 +291,33 @@ export default function CourseDetailScreen({ route, navigation }: any) {
             style={styles.thumbnail}
           />
           <SafeAreaView style={styles.floatingHeader}>
+            {/* CỤM NÚT TRÁI (Nút Quay lại) */}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => navigation.goBack()}
             >
               <Ionicons name="chevron-back" size={24} color="#37474F" />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={handleToggleWishlist}
-            >
-              <Ionicons
-                name={isLiked ? "heart" : "heart-outline"}
-                size={24}
-                color="#FF5252"
-              />
-            </TouchableOpacity>
+
+            {/* CỤM NÚT PHẢI (Menu + Trái tim) */}
+            <View style={{ flexDirection: "row" }}>
+              <TouchableOpacity
+                style={[styles.iconButton, { marginRight: 10 }]}
+                onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+              >
+                <Ionicons name="menu" size={24} color="#37474F" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={handleToggleWishlist}
+              >
+                <Ionicons
+                  name={isLiked ? "heart" : "heart-outline"}
+                  size={24}
+                  color="#FF5252"
+                />
+              </TouchableOpacity>
+            </View>
           </SafeAreaView>
         </View>
 
@@ -400,7 +403,11 @@ export default function CourseDetailScreen({ route, navigation }: any) {
           ]}
           onPress={
             isEnrolled
-              ? () => navigation.navigate("Learning", { courseTitle: course?.title, sections: course?.sections })
+              ? () =>
+                  navigation.navigate("Learning", {
+                    courseTitle: course?.title,
+                    sections: course?.sections,
+                  })
               : handleAddToCart
           }
         >
@@ -412,7 +419,10 @@ export default function CourseDetailScreen({ route, navigation }: any) {
           <TouchableOpacity
             style={[
               styles.cartIconButton,
-              alreadyInCart && { backgroundColor: "#E8F5E9", borderColor: "#4CD137" },
+              alreadyInCart && {
+                backgroundColor: "#E8F5E9",
+                borderColor: "#4CD137",
+              },
             ]}
             onPress={handleAddToCart}
           >
@@ -428,7 +438,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   );
 }
 
-// ... (Giữ nguyên phần styles cũ, không thay đổi)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FDFBF7" },
   loadingContainer: {
