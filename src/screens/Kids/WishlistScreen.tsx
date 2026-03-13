@@ -27,8 +27,8 @@ export default function WishlistScreen({ navigation }: any) {
   // 1. Xóa 1 mục (Khi KHÔNG ở chế độ Edit)
   const handleUnlike = (course: any) => {
     toggleWishlist(course);
-    // Nếu xóa xong mà danh sách chỉ còn 1 hoặc 0 mục, tự động tắt chế độ sửa
-    if (wishlist.length <= 2) {
+    // Nếu xóa xong mà danh sách trống hoặc chỉ còn 1 mục, tự động tắt chế độ sửa
+    if (wishlist.length <= 1) {
       setIsEditMode(false);
       setSelectedIds([]);
     }
@@ -55,12 +55,12 @@ export default function WishlistScreen({ navigation }: any) {
   // 4. Xóa các mục đã chọn
   const handleDeleteSelected = () => {
     if (selectedIds.length === 0) {
-      Alert.alert("Thông báo", "Vui lòng chọn ít nhất 1 khóa học để xóa.");
+      Alert.alert("Thông báo", "Vui lòng chọn ít nhất 1 mục để xóa.");
       return;
     }
     Alert.alert(
       "Xác nhận xóa",
-      `Bạn có chắc muốn xóa ${selectedIds.length} khóa học này khỏi danh sách yêu thích?`,
+      `Bạn có chắc muốn xóa ${selectedIds.length} mục này khỏi danh sách yêu thích?`,
       [
         { text: "Hủy", style: "cancel" },
         {
@@ -80,7 +80,7 @@ export default function WishlistScreen({ navigation }: any) {
   const handleDeleteAll = () => {
     Alert.alert(
       "Xóa tất cả",
-      "Bạn có chắc chắn muốn xóa TOÀN BỘ khóa học trong danh sách yêu thích?",
+      "Bạn có chắc chắn muốn xóa TOÀN BỘ danh sách yêu thích?",
       [
         { text: "Hủy", style: "cancel" },
         {
@@ -99,6 +99,10 @@ export default function WishlistScreen({ navigation }: any) {
   const renderWishlistItem = ({ item }: { item: any }) => {
     const isSelected = selectedIds.includes(item._id);
 
+    // FIX: Nhận diện xem item này là Khóa học lẻ hay Combo
+    const isCombo =
+      item.isCombo || (item.courses && Array.isArray(item.courses));
+
     return (
       <TouchableOpacity
         style={[styles.card, isEditMode && isSelected && styles.cardSelected]}
@@ -107,11 +111,18 @@ export default function WishlistScreen({ navigation }: any) {
           if (isEditMode) {
             toggleSelection(item._id); // Chế độ sửa -> tick chọn
           } else {
-            // THÊM ĐIỀU HƯỚNG: Bấm vào item nhảy sang trang Course Detail
-            navigation.navigate("CourseDetail", {
-              courseId: item._id,
-              slug: item.slug,
-            });
+            // FIX: Điều hướng đúng trang tương ứng với Khóa học hay Combo
+            if (isCombo) {
+              navigation.navigate("ComboDetail", {
+                comboId: item._id || item.id,
+                slug: item.slug,
+              });
+            } else {
+              navigation.navigate("CourseDetail", {
+                courseId: item._id || item.id,
+                slug: item.slug,
+              });
+            }
           }
         }}
         // Mẹo UX: Đè giữ lâu sẽ tự động bật chế độ sửa (chỉ hoạt động nếu có > 1 mục)
@@ -133,21 +144,32 @@ export default function WishlistScreen({ navigation }: any) {
           </View>
         )}
 
-        <Image
-          source={{
-            uri:
-              item.thumbnail ||
-              "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400",
-          }}
-          style={styles.thumbnail}
-        />
+        <View style={styles.imageContainer}>
+          <Image
+            source={{
+              uri:
+                item.thumbnail ||
+                "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400",
+            }}
+            style={styles.thumbnail}
+          />
+          {/* FIX: Thêm Badge báo hiệu Combo cho người dùng dễ nhìn */}
+          {isCombo && (
+            <View style={styles.comboBadge}>
+              <Text style={styles.comboBadgeText}>COMBO</Text>
+            </View>
+          )}
+        </View>
 
         <View style={styles.infoBox}>
           <Text style={styles.title} numberOfLines={2}>
             {item.title}
           </Text>
+          {/* FIX: Hiển thị đúng định dạng tiền tệ VNĐ */}
           <Text style={styles.price}>
-            {item.price === 0 ? "Miễn phí" : `$${item.price}`}
+            {item.price === 0
+              ? "Miễn phí"
+              : `${item.price?.toLocaleString("vi-VN")} đ`}
           </Text>
         </View>
 
@@ -287,11 +309,30 @@ const styles = StyleSheet.create({
     backgroundColor: "#FCE4EC",
   },
   checkboxContainer: { marginRight: 10 },
+  imageContainer: {
+    position: "relative",
+  },
   thumbnail: {
     width: 80,
     height: 80,
     borderRadius: 15,
     backgroundColor: "#F5F5F5",
+  },
+  comboBadge: {
+    position: "absolute",
+    top: -5,
+    left: -5,
+    backgroundColor: "#FF4757",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FFF",
+  },
+  comboBadgeText: {
+    color: "#FFF",
+    fontSize: 9,
+    fontWeight: "bold",
   },
   infoBox: { flex: 1, marginLeft: 15, justifyContent: "center" },
   title: {
