@@ -11,16 +11,19 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native"; // THÊM IMPORT NÀY
+import { useFocusEffect, DrawerActions } from "@react-navigation/native";
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
-import { createPayment, checkCourseInCart } from "../../api/paymentService";
+import { createPayment } from "../../api/paymentService";
+
+// IMPORT CUSTOM TOAST
+import CustomToast from "../../components/CustomToast";
 
 export default function ComboDetailScreen({ route, navigation }: any) {
   const { comboId, slug } = route.params || {};
 
   const isMounted = useRef(true);
-  const isFirstMount = useRef(true); // Thêm ref này để track lần mount đầu tiên
+  const isFirstMount = useRef(true);
 
   const [combo, setCombo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -28,15 +31,37 @@ export default function ComboDetailScreen({ route, navigation }: any) {
   const [ownedCourseIds, setOwnedCourseIds] = useState<string[]>([]);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
+  // STATE ĐỂ QUẢN LÝ THÔNG BÁO (TOAST)
+  const [toast, setToast] = useState({
+    visible: false,
+    message: "",
+    type: "success" as any,
+  });
+
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
-  const isInWishlist = useShopStore((state) => state.isInWishlist);
   const addToCart = useShopStore((state) => state.addToCart);
-  const isInCart = useShopStore((state) => state.isInCart);
 
-  const isLiked = combo ? isInWishlist(combo._id) : false;
-  const alreadyInCart = combo ? isInCart(combo._id) : false;
+  const wishlist = useShopStore((state) => state.wishlist);
+  const cart = useShopStore((state) => state.cart);
 
-  // Tách fetch logic thành function riêng để tái sử dụng
+  const isLiked = combo
+    ? wishlist.some((item: any) => item._id === combo._id)
+    : false;
+  const alreadyInCart = combo
+    ? cart.some((item: any) => item._id === combo._id)
+    : false;
+
+  // HÀM HIỂN THỊ TOAST TỰ ẨN SAU 2 GIÂY
+  const showToast = (
+    message: string,
+    type: "success" | "info" | "warning" = "success",
+  ) => {
+    setToast({ visible: true, message, type });
+    setTimeout(() => {
+      setToast((prev) => ({ ...prev, visible: false }));
+    }, 2000);
+  };
+
   const fetchComboDetail = async () => {
     if (!comboId && !slug) return;
 
@@ -86,18 +111,12 @@ export default function ComboDetailScreen({ route, navigation }: any) {
             owned.includes(course._id),
           );
           setIsEnrolled(allCoursesOwned);
-
-          console.log("✅ Combo loaded, enrolled:", allCoursesOwned);
-          console.log("✅ Owned courses:", owned);
         }
       }
     } catch (error: any) {
       console.error("Fetch combo error:", error);
       if (isMounted.current) {
-        Alert.alert(
-          "Lỗi",
-          "Không thể tải chi tiết Combo. Vui lòng thử lại sau!",
-        );
+        showToast("Không thể tải chi tiết Combo!", "warning");
       }
     } finally {
       if (isMounted.current) {
@@ -106,24 +125,19 @@ export default function ComboDetailScreen({ route, navigation }: any) {
     }
   };
 
-  // Initial load khi component mount lần đầu
   useEffect(() => {
     fetchComboDetail();
-
     return () => {
       isMounted.current = false;
     };
   }, [comboId, slug]);
 
-  // Auto refetch khi quay lại từ Payment hoặc màn hình khác
   useFocusEffect(
     React.useCallback(() => {
-      // Bỏ qua lần đầu tiên vì useEffect đã fetch rồi
       if (isFirstMount.current) {
         isFirstMount.current = false;
         return;
       }
-      console.log("🔄 Screen focused, refetching combo...");
       fetchComboDetail();
     }, [comboId, slug]),
   );
@@ -132,47 +146,35 @@ export default function ComboDetailScreen({ route, navigation }: any) {
     if (!combo) return;
     toggleWishlist(combo);
     if (!isLiked)
-      Alert.alert("Yêu thích 💖", "Đã thêm Combo vào danh sách Yêu thích!");
+      showToast("Đã thêm Combo vào danh sách Yêu thích!", "success");
+    else showToast("Đã bỏ khỏi danh sách Yêu thích", "info");
   };
 
   const handleAddToCart = () => {
     if (!combo) return;
 
     if (isEnrolled) {
-      Alert.alert(
-        "Đã sở hữu",
+      showToast(
         "Bạn đã sở hữu tất cả khóa học trong Combo này rồi!",
+        "warning",
       );
       return;
     }
 
     if (alreadyInCart) {
-      Alert.alert("Giỏ hàng", "Combo này đã có trong giỏ hàng rồi nhé!", [
-        { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
-        { text: "Ở lại", style: "cancel" },
-      ]);
+      showToast("Combo này đã có trong giỏ hàng rồi nhé!", "info");
       return;
     }
 
-    // ✅ Call addToCart and handle result immediately
-    const result = addToCart({ ...combo, isCombo: true });
-
-    // Note: result is a Promise, but we can show alert immediately
-    // Backend sync happens in background
-    Alert.alert("Thành công! 🛒", "Đã thêm Combo vào Giỏ hàng của phụ huynh!", [
-      { text: "Ở lại trang", style: "cancel" },
-      { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
-    ]);
+    addToCart({ ...combo, isCombo: true });
+    showToast("Đã thêm Combo vào Giỏ hàng! 🛒", "success");
   };
 
   const handleBuyNow = async () => {
     if (!combo) return;
 
     if (isEnrolled) {
-      Alert.alert(
-        "Đã sở hữu",
-        "Bạn đã sở hữu tất cả khóa học trong Combo này rồi!",
-      );
+      showToast("Bạn đã sở hữu tất cả khóa học trong Combo này rồi!", "info");
       return;
     }
 
@@ -186,7 +188,6 @@ export default function ComboDetailScreen({ route, navigation }: any) {
           onPress: async () => {
             try {
               if (!isMounted.current) return;
-
               setIsProcessingPayment(true);
 
               const paymentData = await createPayment({
@@ -206,16 +207,11 @@ export default function ComboDetailScreen({ route, navigation }: any) {
                 });
               } else {
                 if (isMounted.current) {
-                  Alert.alert(
-                    "Lỗi",
-                    "Không thể tạo thanh toán. Vui lòng thử lại!",
-                  );
+                  showToast("Không thể tạo thanh toán!", "warning");
                 }
               }
             } catch (error: any) {
               console.error("Payment error:", error);
-              console.error("Error response:", error.response?.data);
-
               if (isMounted.current) {
                 Alert.alert(
                   "Lỗi thanh toán",
@@ -316,6 +312,12 @@ export default function ComboDetailScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <CustomToast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+      />
+
       <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
         <View style={styles.headerImageContainer}>
           <Image
@@ -333,16 +335,25 @@ export default function ComboDetailScreen({ route, navigation }: any) {
             >
               <Ionicons name="chevron-back" size={24} color="#37474F" />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.iconButton}
-              onPress={handleToggleWishlist}
-            >
-              <Ionicons
-                name={isLiked ? "heart" : "heart-outline"}
-                size={24}
-                color="#FF5252"
-              />
-            </TouchableOpacity>
+
+            <View style={{ flexDirection: "row" }}>
+              <TouchableOpacity
+                style={[styles.iconButton, { marginRight: 10 }]}
+                onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+              >
+                <Ionicons name="menu" size={24} color="#37474F" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={handleToggleWishlist}
+              >
+                <Ionicons
+                  name={isLiked ? "heart" : "heart-outline"}
+                  size={24}
+                  color="#FF5252"
+                />
+              </TouchableOpacity>
+            </View>
           </SafeAreaView>
         </View>
 
@@ -424,7 +435,6 @@ export default function ComboDetailScreen({ route, navigation }: any) {
   );
 }
 
-// Styles giữ nguyên
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FDFBF7" },
   loadingContainer: {
@@ -564,9 +574,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  ownedButton: {
-    backgroundColor: "#4CD137",
-    marginRight: 0,
-  },
+  ownedButton: { backgroundColor: "#4CD137", marginRight: 0 },
   buyButtonText: { color: "#FFF", fontSize: 18, fontWeight: "900" },
 });

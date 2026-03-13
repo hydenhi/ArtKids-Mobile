@@ -16,7 +16,7 @@ import axiosClient from "../../api/axiosClient";
 
 export default function RegisterScreen({ navigation }: any) {
   const [fullname, setFullname] = useState("");
-  const [username, setUsername] = useState(""); // <-- THÊM STATE USERNAME
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -24,13 +24,20 @@ export default function RegisterScreen({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleRegister = async () => {
-    // 1. Cập nhật kiểm tra nhập đầy đủ (Thêm username)
+    // 1. Cập nhật kiểm tra nhập đầy đủ
     if (!fullname || !username || !email || !password || !confirmPassword) {
       Alert.alert("Lỗi", "Vui lòng nhập đầy đủ thông tin!");
       return;
     }
 
-    // 2. Kiểm tra mật khẩu
+    // 2. Kiểm tra định dạng Email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert("Lỗi", "Định dạng email không hợp lệ!");
+      return;
+    }
+
+    // 3. Kiểm tra mật khẩu
     if (password !== confirmPassword) {
       Alert.alert("Lỗi", "Mật khẩu xác nhận không khớp!");
       return;
@@ -40,9 +47,8 @@ export default function RegisterScreen({ navigation }: any) {
       setIsLoading(true);
       console.log("⏳ Đang gửi yêu cầu đăng ký...");
 
-      // 3. GỬI THÊM USERNAME XUỐNG BACKEND
       const response = await axiosClient.post("/auth/register", {
-        username: username, // <-- DỮ LIỆU BỊ THIẾU Ở LẦN TRƯỚC NẰM Ở ĐÂY
+        username: username,
         fullname: fullname,
         email: email,
         password: password,
@@ -58,10 +64,10 @@ export default function RegisterScreen({ navigation }: any) {
       );
     } catch (error: any) {
       console.log("Lỗi đăng ký:", error.message);
+      // Lấy chính xác error message mà Backend (authController) trả về
       const errorMsg =
         error.response?.data?.message ||
-        error.response?.data?.error ||
-        "Đăng ký thất bại. Email hoặc username có thể đã tồn tại.";
+        "Đăng ký thất bại. Vui lòng kiểm tra lại kết nối.";
       Alert.alert("Đăng ký thất bại", errorMsg);
     } finally {
       setIsLoading(false);
@@ -91,7 +97,6 @@ export default function RegisterScreen({ navigation }: any) {
             Bắt đầu hành trình sáng tạo cùng bé
           </Text>
 
-          {/* Ô nhập Họ và Tên */}
           <TextInput
             style={styles.input}
             placeholder="Họ và tên phụ huynh"
@@ -101,7 +106,6 @@ export default function RegisterScreen({ navigation }: any) {
             editable={!isLoading}
           />
 
-          {/* Ô nhập Tên đăng nhập (MỚI THÊM) */}
           <TextInput
             style={styles.input}
             placeholder="Tên đăng nhập (Ví dụ: phuhuynh01)"
@@ -112,7 +116,6 @@ export default function RegisterScreen({ navigation }: any) {
             editable={!isLoading}
           />
 
-          {/* Ô nhập Email */}
           <TextInput
             style={styles.input}
             placeholder="Email"
@@ -124,7 +127,6 @@ export default function RegisterScreen({ navigation }: any) {
             editable={!isLoading}
           />
 
-          {/* Ô nhập Mật khẩu */}
           <TextInput
             style={styles.input}
             placeholder="Mật khẩu"
@@ -135,7 +137,6 @@ export default function RegisterScreen({ navigation }: any) {
             editable={!isLoading}
           />
 
-          {/* Ô Xác nhận mật khẩu */}
           <TextInput
             style={styles.input}
             placeholder="Xác nhận mật khẩu"

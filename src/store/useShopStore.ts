@@ -12,6 +12,8 @@ interface ShopState {
   isInWishlist: (courseId: string) => boolean;
   isInCart: (courseId: string) => boolean;
   getCourseIdsInCombos: () => string[];
+  removeFromWishlist: (courseIds: string[]) => void;
+  clearWishlist: () => void;
 }
 
 // ✅ Bỏ persist middleware để tránh lỗi storage
@@ -115,6 +117,14 @@ export const useShopStore = create<ShopState>((set, get) => ({
       set({ wishlist: [...wishlist, course] });
     }
   },
+
+  removeFromWishlist: (courseIds) => {
+    set({
+      wishlist: get().wishlist.filter((item) => !courseIds.includes(item._id)),
+    });
+  },
+
+  clearWishlist: () => set({ wishlist: [] }),
 
   isInWishlist: (courseId) => {
     return !!get().wishlist.find((item) => item._id === courseId);
