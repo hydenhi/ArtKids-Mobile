@@ -62,7 +62,7 @@ export default function CartScreen({ navigation }: any) {
 
     Alert.alert(
       "Xác nhận thanh toán",
-      `Bạn xác nhận thanh toán ${itemText} với tổng tiền $${totalAmount.toFixed(2)}?`,
+      `Bạn xác nhận thanh toán ${itemText} với tổng tiền ${totalAmount.toLocaleString("vi-VN")} đ?`,
       [
         { text: "Hủy", style: "cancel" },
         {
@@ -166,7 +166,9 @@ export default function CartScreen({ navigation }: any) {
         </Text>
         {item.isCombo && <Text style={styles.comboLabel}>📦 Combo</Text>}
         <Text style={styles.itemPrice}>
-          {item.price === 0 ? "Miễn phí" : `$${item.price}`}
+          {item.price === 0
+            ? "Miễn phí"
+            : `${item.price.toLocaleString("vi-VN")} đ`}
         </Text>
       </View>
       <View style={styles.actionBox}>
@@ -227,7 +229,7 @@ export default function CartScreen({ navigation }: any) {
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Tổng cộng</Text>
                   <Text style={styles.summaryValue}>
-                    ${totalAmount.toFixed(2)}
+                    {totalAmount.toLocaleString("vi-VN")} đ
                   </Text>
                 </View>
               </View>
