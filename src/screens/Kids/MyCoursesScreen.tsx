@@ -78,7 +78,7 @@ export default function MyCoursesScreen({ navigation }: any) {
           <Text style={styles.title} numberOfLines={2}>
             {title}
           </Text>
-          {/* 
+
           <View style={styles.progressRow}>
             <View style={styles.progressBarBg}>
               <View
@@ -89,7 +89,7 @@ export default function MyCoursesScreen({ navigation }: any) {
               />
             </View>
             <Text style={styles.progressText}>{progress}%</Text>
-          </View> */}
+          </View>
 
           <TouchableOpacity
             style={styles.studyButton}

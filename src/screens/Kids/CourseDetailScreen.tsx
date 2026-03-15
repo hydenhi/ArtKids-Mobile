@@ -20,6 +20,7 @@ import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
 import { useFocusEffect } from "@react-navigation/native";
 import { createPayment } from "../../api/paymentService";
+import { getCourseProgress } from "../../api/lessonService";
 
 // IMPORT CUSTOM TOAST
 import CustomToast from "../../components/CustomToast";
@@ -39,6 +40,7 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const [courseInComboWarning, setCourseInComboWarning] = useState<
     string | null
   >(null);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
 
   // --- STATE CHO CHỨC NĂNG ĐÁNH GIÁ ---
   const [isReviewModalVisible, setIsReviewModalVisible] = useState(false);
@@ -143,6 +145,29 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       fetchCourseDetail();
     }, []),
   );
+
+  useEffect(() => {
+    const fetchProgress = async () => {
+      if (!isEnrolled || !course?._id) {
+        setCompletedLessonIds([]);
+        return;
+      }
+
+      try {
+        const res = await getCourseProgress(course._id);
+        if (res.success) {
+          const normalizedIds = (res.data || []).map((item: any) =>
+            typeof item.lesson === "string" ? item.lesson : item.lesson?._id,
+          );
+          setCompletedLessonIds(normalizedIds.filter(Boolean));
+        }
+      } catch (error) {
+        console.error("Fetch course progress error:", error);
+      }
+    };
+
+    fetchProgress();
+  }, [isEnrolled, course?._id]);
 
   const handleBuyNow = async () => {
     if (!course) return;
@@ -320,6 +345,8 @@ export default function CourseDetailScreen({ route, navigation }: any) {
               (section.lessonsId || section.lessons).map(
                 (lesson: any, lIndex: number) => {
                   const canPlay = isEnrolled || lesson.isTrial || lesson.isFree;
+                  const isCompleted = completedLessonIds.includes(lesson._id);
+
                   return (
                     <TouchableOpacity
                       key={lesson._id || lIndex}
@@ -334,9 +361,21 @@ export default function CourseDetailScreen({ route, navigation }: any) {
                           ]}
                         >
                           <Ionicons
-                            name={canPlay ? "play" : "lock-closed"}
+                            name={
+                              isCompleted
+                                ? "checkmark"
+                                : canPlay
+                                  ? "play"
+                                  : "lock-closed"
+                            }
                             size={16}
-                            color={canPlay ? "#00B894" : "#B2BEC3"}
+                            color={
+                              isCompleted
+                                ? "#00B894"
+                                : canPlay
+                                  ? "#00B894"
+                                  : "#B2BEC3"
+                            }
                           />
                         </View>
                         <Text
