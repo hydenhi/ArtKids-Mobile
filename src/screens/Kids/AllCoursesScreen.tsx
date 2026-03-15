@@ -15,22 +15,51 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 
+const CATEGORY_ICONS: any = {
+  Drawing: { icon: "pencil" },
+  Vẽ: { icon: "pencil" },
+  Paint: { icon: "color-palette" },
+  "Hội họa": { icon: "color-palette" },
+  Sketching: { icon: "brush" },
+  "Phác thảo": { icon: "brush" },
+  Craft: { icon: "cut" },
+  "Thủ công": { icon: "cut" },
+  Digital: { icon: "laptop" },
+  "Kỹ thuật số": { icon: "laptop" },
+  Clay: { icon: "construct" },
+  "Đất sét": { icon: "construct" },
+  Default: { icon: "apps" },
+};
+
+const getCategoryIcon = (name: string) => {
+  if (!name || name === "all") return "grid-outline";
+  const lowerName = name.toLowerCase();
+  for (const key in CATEGORY_ICONS) {
+    if (lowerName.includes(key.toLowerCase())) {
+      return CATEGORY_ICONS[key].icon;
+    }
+  }
+  return "apps-outline";
+};
+
 const STATIC_LEVELS = [
-  { id: "all", title: "Mọi cấp độ" },
-  { id: "beginner", title: "Cơ bản" },
-  { id: "intermediate", title: "Trung cấp" },
-  { id: "advanced", title: "Nâng cao" },
+  { id: "all", title: "Tất cả", icon: "layers-outline" },
+  { id: "beginner", title: "Cơ bản", icon: "star-outline" },
+  { id: "intermediate", title: "Trung cấp", icon: "rocket-outline" },
+  { id: "advanced", title: "Nâng cao", icon: "trophy-outline" },
 ];
 
-export default function AllCoursesScreen({ navigation }: any) {
+export default function AllCoursesScreen({ route, navigation }: any) {
   const [courses, setCourses] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
 
+  const { initialCategory = "all" } = route.params || {};
+
   // Search and filter states
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState(initialCategory);
   const [level, setLevel] = useState("all");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
@@ -64,6 +93,7 @@ export default function AllCoursesScreen({ navigation }: any) {
         search: search || undefined,
         category: category !== "all" ? category : undefined,
         level: level !== "all" ? level : undefined,
+        status: "published", // Chỉ lấy khóa học đã xuất bản
         limit: 1000,
       };
       const res = await axiosClient.get("/courses", { params });
@@ -101,7 +131,7 @@ export default function AllCoursesScreen({ navigation }: any) {
         source={{
           uri:
             item.thumbnail ||
-            "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400",
+            "https://placehold.co/400x300/FFE082/D84315?text=ArtKids",
         }}
         style={styles.cardImage}
       />
@@ -183,9 +213,16 @@ export default function AllCoursesScreen({ navigation }: any) {
                 style={[
                   styles.filterButton,
                   level === lvl.id && styles.filterButtonActive,
+                  { flexDirection: "row", alignItems: "center" }
                 ]}
                 onPress={() => setLevel(lvl.id)}
               >
+                <Ionicons
+                  name={lvl.icon as any}
+                  size={16}
+                  color={level === lvl.id ? "#FFF" : "#455A64"}
+                  style={{ marginRight: 5 }}
+                />
                 <Text
                   style={[
                     styles.filterButtonText,
@@ -232,14 +269,22 @@ export default function AllCoursesScreen({ navigation }: any) {
                     setShowCategoryDropdown(false);
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.dropdownItemText,
-                      category === cat.id && styles.dropdownItemTextActive,
-                    ]}
-                  >
-                    {cat.title}
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Ionicons 
+                      name={getCategoryIcon(cat.title)} 
+                      size={20} 
+                      color={category === cat.id ? "#FF8A80" : "#90A4AE"} 
+                      style={{ marginRight: 12 }}
+                    />
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        category === cat.id && styles.dropdownItemTextActive,
+                      ]}
+                    >
+                      {cat.title}
+                    </Text>
+                  </View>
                   {category === cat.id && (
                     <Ionicons name="checkmark" size={20} color="#FF8A80" />
                   )}
@@ -297,8 +342,9 @@ const styles = StyleSheet.create({
 
   card: {
     backgroundColor: "#FFF",
-    flex: 1,
-    margin: 10,
+    flex: 0.5,
+    maxWidth: "48%",
+    margin: 8,
     borderRadius: 20,
     padding: 10,
     shadowColor: "#000",

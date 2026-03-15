@@ -324,7 +324,8 @@ export default function ComboDetailScreen({ route, navigation }: any) {
             source={{
               uri:
                 combo.thumbnail ||
-                "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400",
+                combo.courses?.[0]?.thumbnail || // Fallback
+                "https://placehold.co/800x600/E0F7FA/006064?text=ArtKids+Combo",
             }}
             style={styles.thumbnail}
           />

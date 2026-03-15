@@ -201,15 +201,17 @@ export default function CourseDetailScreen({ route, navigation }: any) {
     if (isEnrolled || isFreeOrTrial) {
       navigation.navigate("Learning", {
         courseTitle: course?.title,
+        courseId: course?._id,
         sections: course?.sections,
         initialLesson: lesson,
+        isEnrolled: isEnrolled, // Thêm dòng này
       });
-    } else {
-      Alert.alert(
-        "Khóa học bị khóa",
-        "Bé hãy nhờ bố mẹ mua khóa học để xem bài này nhé! 🔒",
-      );
+      return;
     }
+    Alert.alert(
+      "Khóa học bị khóa",
+      "Bé hãy nhờ bố mẹ mua khóa học để xem bài này nhé! 🔒",
+    );
   };
 
   const handleToggleWishlist = () => {
@@ -479,7 +481,7 @@ export default function CourseDetailScreen({ route, navigation }: any) {
             source={{
               uri:
                 course.thumbnail ||
-                "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400",
+                "https://placehold.co/800x600/FFE082/D84315?text=ArtKids+Course",
             }}
             style={styles.thumbnail}
           />
@@ -648,7 +650,9 @@ export default function CourseDetailScreen({ route, navigation }: any) {
             onPress={() =>
               navigation.navigate("Learning", {
                 courseTitle: course?.title,
+                courseId: course?._id,
                 sections: course?.sections,
+                isEnrolled: true, // Chắc chắn là true nếu ở trong block này
               })
             }
           >
