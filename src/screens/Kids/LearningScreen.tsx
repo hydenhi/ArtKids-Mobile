@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,10 +6,12 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import YoutubePlayer from "react-native-youtube-iframe";
+import { getCourseProgress, markLessonComplete } from "../../api/lessonService";
 
 // Hàm trích xuất ID youtube từ URL HOẶC trả về nguyên ID nếu đã là ID
 const getYouTubeId = (rawUrl: string) => {
@@ -32,8 +34,10 @@ const getYouTubeId = (rawUrl: string) => {
 export default function LearningScreen({ route, navigation }: any) {
   const {
     courseTitle = "Khóa học nghệ thuật",
+    courseId = null,
     sections = [],
     initialLesson = null,
+    isEnrolled = false, // Tiếp nhận trạng thái sở hữu
   } = route.params || {};
 
   // Trải phẳng (flatten) tất cả các bài học từ các phần để dễ điều hướng (Prev/Next)
@@ -44,8 +48,29 @@ export default function LearningScreen({ route, navigation }: any) {
   const [currentLesson, setCurrentLesson] = useState<any>(
     initialLesson || allLessons[0] || null,
   );
-
   const [playing, setPlaying] = useState(false);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
+  const [loadingProgress, setLoadingProgress] = useState(false);
+
+  // Fetch tiến độ khóa học
+  const fetchProgress = async () => {
+    if (!courseId || !isEnrolled) return; // Chỉ fetch tiến độ nếu đã mua khóa học
+    try {
+      setLoadingProgress(true);
+      const res = await getCourseProgress(courseId);
+      if (res.success) {
+        setCompletedLessonIds(res.data.map((item) => item.lesson));
+      }
+    } catch (error) {
+      console.error("Fetch progress error:", error);
+    } finally {
+      setLoadingProgress(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProgress();
+  }, [courseId, isEnrolled]);
 
   // Tìm vị trí bài học hiện tại trong danh sách phẳng
   const currentIndex = currentLesson
@@ -55,9 +80,23 @@ export default function LearningScreen({ route, navigation }: any) {
   const hasNext = currentIndex !== -1 && currentIndex < allLessons.length - 1;
   const hasPrev = currentIndex > 0;
 
+  // Kiểm tra quyền xem bài học
+  const checkAccess = (lesson: any) => {
+    if (isEnrolled || lesson.isTrial) return true;
+    return false;
+  };
+
   const handleNext = () => {
     if (hasNext) {
-      setCurrentLesson(allLessons[currentIndex + 1]);
+      const nextLesson = allLessons[currentIndex + 1];
+      if (checkAccess(nextLesson)) {
+        setCurrentLesson(nextLesson);
+      } else {
+        Alert.alert(
+          "Khóa học bị khóa 🔒",
+          "Bé phải nhờ bố mẹ mua khóa học đầy đủ để xem được các bài học tiếp theo nhé!",
+        );
+      }
     } else {
       Alert.alert("Hoàn thành!", "Tuyệt vời, bạn đã xem hết khóa học này!");
     }
@@ -65,24 +104,49 @@ export default function LearningScreen({ route, navigation }: any) {
 
   const handlePrev = () => {
     if (hasPrev) {
-      setCurrentLesson(allLessons[currentIndex - 1]);
+      const prevLesson = allLessons[currentIndex - 1];
+      if (checkAccess(prevLesson)) {
+        setCurrentLesson(prevLesson);
+      } else {
+        Alert.alert(
+          "Bài học bị khóa 🔒",
+          "Nội dung này yêu cầu đăng ký khóa học để xem lại ạ.",
+        );
+      }
     }
   };
 
   const handleSelectLesson = (lesson: any) => {
-    // Tạm thời bỏ qua vụ "locked/completed" vì API hiện tại chưa hỗ trợ tiến độ học tập chi tiết của từng user.
-    // Ai đã vào màn hình này coi như học được hết.
-    setCurrentLesson(lesson);
+    if (checkAccess(lesson)) {
+      setCurrentLesson(lesson);
+    } else {
+      Alert.alert(
+        "Khóa học bị khóa 🔒",
+        "Bé hãy nhờ bố mẹ mua khóa học đầy đủ để mở bài học này nhé!",
+      );
+    }
   };
 
   const onStateChange = useCallback(
-    (state: string) => {
+    async (state: string) => {
       if (state === "ended") {
         setPlaying(false);
-        // Bạn có thể tự động chuyển bài ở đây nếu muốn bằng cách gọi handleNext()
+        // Đánh dấu hoàn thành bài học khi xem xong
+        if (currentLesson?._id && !completedLessonIds.includes(currentLesson._id)) {
+          try {
+            const res = await markLessonComplete(currentLesson._id);
+            if (res.success) {
+              setCompletedLessonIds((prev) => [...prev, currentLesson._id]);
+            }
+          } catch (error) {
+            console.error("Mark lesson complete error:", error);
+          }
+        }
+        // Tự động chuyển bài
+        handleNext();
       }
     },
-    [currentIndex, allLessons],
+    [currentIndex, allLessons, currentLesson, completedLessonIds, handleNext],
   );
 
   const youtubeId = currentLesson
@@ -171,8 +235,20 @@ export default function LearningScreen({ route, navigation }: any) {
                             size={24}
                             color="#FF8A80"
                           />
-                        ) : (
+                        ) : completedLessonIds.includes(lesson._id) ? (
+                            <Ionicons
+                                name="checkmark-circle"
+                                size={24}
+                                color="#00B894"
+                            />
+                        ) : isEnrolled || lesson.isTrial ? (
                           <View style={styles.circleOutline} />
+                        ) : (
+                          <Ionicons
+                            name="lock-closed"
+                            size={20}
+                            color="#B2BEC3"
+                          />
                         )}
 
                         <Text

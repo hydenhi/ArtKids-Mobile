@@ -15,34 +15,37 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/useAuthStore";
 import axiosClient from "../../api/axiosClient";
 
-const STATIC_CATEGORIES = [
-  { id: "1", title: "Drawing", icon: "pencil", color: "#E8F5E9" },
-  { id: "2", title: "Paint", icon: "color-palette", color: "#FFF9C4" },
-  { id: "3", title: "Sketching", icon: "brush", color: "#E0F7FA" },
-];
-
 export default function HomeScreen({ navigation }: any) {
   const user = useAuthStore((state) => state.user);
   const [courses, setCourses] = useState<any[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(true);
 
   useEffect(() => {
     const fetchHomeData = async () => {
       try {
         setLoading(true);
-        const [courseRes, comboRes] = await Promise.all([
-          axiosClient.get("/courses"),
-          axiosClient.get("/combos"),
+        const [courseRes, comboRes, categoryRes] = await Promise.all([
+          axiosClient.get("/courses", { params: { status: "published" } }),
+          axiosClient.get("/combos", { params: { status: "published" } }),
+          axiosClient
+            .get("/courses/categories/all")
+            .catch(() => ({ data: { categories: [] } })),
         ]);
         const coursesData = courseRes.data?.courses || courseRes.data || [];
         const combosData = comboRes.data?.combos || comboRes.data || [];
-        setCourses(coursesData);
-        setCombos(combosData);
+        const catsData = categoryRes.data?.categories || [];
+
+        setCourses(coursesData.slice(0, 6)); // Lấy top 6
+        setCombos(combosData.slice(0, 6));
+        setCategories(catsData);
       } catch (error: any) {
         console.log("Lỗi kết nối Backend: ", error.message);
       } finally {
         setLoading(false);
+        setLoadingCategories(false);
       }
     };
     fetchHomeData();
@@ -54,11 +57,11 @@ export default function HomeScreen({ navigation }: any) {
       onPress={() =>
         isCombo
           ? navigation.navigate("ComboDetail", {
-              comboId: item._id || item.id,
+              comboId: item._id,
               slug: item.slug,
             })
           : navigation.navigate("CourseDetail", {
-              courseId: item._id || item.id,
+              courseId: item._id,
               slug: item.slug,
             })
       }
@@ -67,7 +70,8 @@ export default function HomeScreen({ navigation }: any) {
         source={{
           uri:
             item.thumbnail ||
-            "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400",
+            (isCombo ? item.courses?.[0]?.thumbnail : null) ||
+            "https://placehold.co/400x300/FFE082/D84315?text=ArtKids",
         }}
         style={styles.cardImage}
       />
@@ -83,12 +87,21 @@ export default function HomeScreen({ navigation }: any) {
           </Text>
           <View style={styles.ratingBadge}>
             <Ionicons name="star" size={12} color="#FFA000" />
-            <Text style={styles.ratingText}>{item.averageRating ?? "5.0"}</Text>
+            <Text style={styles.ratingText}>{item.averageRating || "0"}</Text>
           </View>
         </View>
       </View>
     </TouchableOpacity>
   );
+
+  const CATEGORY_COLORS = [
+    "#E8F5E9",
+    "#FFF9C4",
+    "#E0F7FA",
+    "#F3E5F5",
+    "#E1F5FE",
+    "#FCE4EC",
+  ];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -156,17 +169,48 @@ export default function HomeScreen({ navigation }: any) {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Khám phá danh mục</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Khám phá danh mục</Text>
+          </View>
           <View style={styles.categoriesRow}>
-            {STATIC_CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                style={[styles.categoryItem, { backgroundColor: cat.color }]}
+            {loadingCategories ? (
+              <ActivityIndicator
+                size="small"
+                color="#FF8A80"
+                style={{ marginLeft: 20 }}
+              />
+            ) : categories.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 10 }}
               >
-                <Ionicons name={cat.icon as any} size={28} color="#546E7A" />
-                <Text style={styles.categoryText}>{cat.title}</Text>
-              </TouchableOpacity>
-            ))}
+                {categories.map((catName, index) => {
+                  const bgColor =
+                    CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.categoryItem,
+                        { backgroundColor: bgColor },
+                      ]}
+                      onPress={() =>
+                        navigation.navigate("AllCourses", {
+                          initialCategory: catName,
+                        })
+                      }
+                    >
+                      <Text style={styles.categoryText}>{catName}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <Text style={{ marginLeft: 20, color: "#999" }}>
+                Chưa có danh mục nào
+              </Text>
+            )}
           </View>
         </View>
 
@@ -330,10 +374,10 @@ const styles = StyleSheet.create({
   bannerBtnText: { color: "#BF360C", fontWeight: "bold", fontSize: 12 },
   bannerMascot: {
     position: "absolute",
-    right: -10,
-    bottom: -10,
-    width: 120,
-    height: 120,
+    right: -5,
+    bottom: -5,
+    width: 100,
+    height: 100,
     zIndex: 1,
     opacity: 0.9,
   },
@@ -349,28 +393,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#37474F",
-    marginLeft: 20,
   },
   seeAllText: { fontSize: 14, color: "#90A4AE", fontWeight: "600" },
   categoriesRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginTop: 15,
+    paddingVertical: 10,
+    marginTop: 5,
   },
   categoryItem: {
-    flex: 1,
-    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginHorizontal: 8,
+    marginBottom: 5, // Thêm khoảng trống cho bóng đổ
     justifyContent: "center",
-    paddingVertical: 20,
-    borderRadius: 20,
-    marginHorizontal: 5,
+    alignItems: "center",
+    backgroundColor: "#FFF", // Fallback color
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
   },
   categoryText: {
-    marginTop: 8,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "bold",
-    color: "#546E7A",
+    color: "#455A64",
+    textAlign: "center",
   },
   card: {
     backgroundColor: "#FFF",
