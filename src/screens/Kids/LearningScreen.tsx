@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -50,21 +49,22 @@ export default function LearningScreen({ route, navigation }: any) {
   );
   const [playing, setPlaying] = useState(false);
   const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
-  const [loadingProgress, setLoadingProgress] = useState(false);
+  const playerRef = useRef<any>(null);
+  const progressCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch tiến độ khóa học
   const fetchProgress = async () => {
     if (!courseId || !isEnrolled) return; // Chỉ fetch tiến độ nếu đã mua khóa học
     try {
-      setLoadingProgress(true);
       const res = await getCourseProgress(courseId);
       if (res.success) {
-        setCompletedLessonIds(res.data.map((item) => item.lesson));
+        const normalizedIds = (res.data || []).map((item: any) =>
+          typeof item.lesson === "string" ? item.lesson : item.lesson?._id,
+        );
+        setCompletedLessonIds(normalizedIds.filter(Boolean));
       }
     } catch (error) {
       console.error("Fetch progress error:", error);
-    } finally {
-      setLoadingProgress(false);
     }
   };
 
@@ -127,27 +127,94 @@ export default function LearningScreen({ route, navigation }: any) {
     }
   };
 
-  const onStateChange = useCallback(
-    async (state: string) => {
-      if (state === "ended") {
-        setPlaying(false);
-        // Đánh dấu hoàn thành bài học khi xem xong
-        if (currentLesson?._id && !completedLessonIds.includes(currentLesson._id)) {
-          try {
-            const res = await markLessonComplete(currentLesson._id);
-            if (res.success) {
-              setCompletedLessonIds((prev) => [...prev, currentLesson._id]);
-            }
-          } catch (error) {
-            console.error("Mark lesson complete error:", error);
-          }
+  const markCurrentLessonComplete = useCallback(
+    async (lessonId?: string) => {
+      if (!lessonId || !isEnrolled || completedLessonIds.includes(lessonId)) {
+        return;
+      }
+
+      try {
+        const res = await markLessonComplete(lessonId);
+        if (res.success) {
+          setCompletedLessonIds((prev) =>
+            prev.includes(lessonId) ? prev : [...prev, lessonId],
+          );
         }
-        // Tự động chuyển bài
-        handleNext();
+      } catch (error) {
+        console.error("Mark lesson complete error:", error);
       }
     },
-    [currentIndex, allLessons, currentLesson, completedLessonIds, handleNext],
+    [isEnrolled, completedLessonIds],
   );
+
+  const onStateChange = useCallback(
+    async (state: string) => {
+      if (state === "playing") {
+        setPlaying(true);
+      }
+
+      if (state === "paused" || state === "ended") {
+        setPlaying(false);
+      }
+
+      if (state !== "ended") return;
+
+      // Đánh dấu hoàn thành bài học khi xem xong
+      await markCurrentLessonComplete(currentLesson?._id);
+
+      // Tự động chuyển bài tiếp theo nếu có thể
+      if (hasNext) {
+        const nextLesson = allLessons[currentIndex + 1];
+        if (checkAccess(nextLesson)) {
+          setCurrentLesson(nextLesson);
+        }
+      } else {
+        Alert.alert("Hoàn thành!", "Tuyệt vời, bạn đã xem hết khóa học này!");
+      }
+    },
+    [
+      currentLesson,
+      hasNext,
+      allLessons,
+      currentIndex,
+      markCurrentLessonComplete,
+    ],
+  );
+
+  useEffect(() => {
+    if (!playing || !currentLesson?._id || !isEnrolled) {
+      if (progressCheckRef.current) {
+        clearInterval(progressCheckRef.current);
+        progressCheckRef.current = null;
+      }
+      return;
+    }
+
+    progressCheckRef.current = setInterval(async () => {
+      try {
+        const duration = await playerRef.current?.getDuration?.();
+        const currentTime = await playerRef.current?.getCurrentTime?.();
+
+        if (!duration || duration <= 0 || currentTime == null) {
+          return;
+        }
+
+        const watchedPercent = (currentTime / duration) * 100;
+        if (watchedPercent >= 75) {
+          await markCurrentLessonComplete(currentLesson._id);
+        }
+      } catch (error) {
+        // Bỏ qua lỗi tạm thời do player chưa sẵn sàng
+      }
+    }, 2500);
+
+    return () => {
+      if (progressCheckRef.current) {
+        clearInterval(progressCheckRef.current);
+        progressCheckRef.current = null;
+      }
+    };
+  }, [playing, currentLesson?._id, isEnrolled, markCurrentLessonComplete]);
 
   const youtubeId = currentLesson
     ? getYouTubeId(currentLesson.videoUrl || currentLesson.url)
@@ -176,6 +243,7 @@ export default function LearningScreen({ route, navigation }: any) {
         <View style={styles.videoContainer}>
           {youtubeId ? (
             <YoutubePlayer
+              ref={playerRef}
               height={220}
               play={playing}
               videoId={youtubeId}
@@ -208,6 +276,9 @@ export default function LearningScreen({ route, navigation }: any) {
         <View style={styles.lessonListContainer}>
           <View style={styles.listHeader}>
             <Text style={styles.listTitle}>Danh sách bài giảng</Text>
+            <Text style={styles.completedCounter}>
+              Hoàn thành: {completedLessonIds.length}/{allLessons.length}
+            </Text>
           </View>
 
           {sections.map((section: any, sIdx: number) => {
@@ -236,11 +307,11 @@ export default function LearningScreen({ route, navigation }: any) {
                             color="#FF8A80"
                           />
                         ) : completedLessonIds.includes(lesson._id) ? (
-                            <Ionicons
-                                name="checkmark-circle"
-                                size={24}
-                                color="#00B894"
-                            />
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={24}
+                            color="#00B894"
+                          />
                         ) : isEnrolled || lesson.isTrial ? (
                           <View style={styles.circleOutline} />
                         ) : (
@@ -370,6 +441,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   listTitle: { fontSize: 18, fontWeight: "bold", color: "#37474F" },
+  completedCounter: {
+    fontSize: 13,
+    color: "#00B894",
+    fontWeight: "700",
+  },
 
   sectionBlock: {
     marginTop: 15,
