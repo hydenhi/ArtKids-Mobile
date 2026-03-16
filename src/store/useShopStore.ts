@@ -2,6 +2,24 @@ import { create } from "zustand";
 // REMOVE: import { persist } from "zustand/middleware";
 import { addToBackendCart, removeFromBackendCart } from "../api/paymentService";
 
+const getItemId = (item: any) => item?._id || item?.id;
+
+const isDuplicateCartError = (err: any) => {
+  const status = err?.response?.status;
+  const message = String(
+    err?.response?.data?.message || err?.message || "",
+  ).toLowerCase();
+
+  return (
+    status === 400 ||
+    status === 409 ||
+    message.includes("already") ||
+    message.includes("exists") ||
+    message.includes("đã tồn tại") ||
+    message.includes("duplicate")
+  );
+};
+
 interface ShopState {
   cart: any[];
   wishlist: any[];
@@ -25,8 +43,13 @@ export const useShopStore = create<ShopState>((set, get) => ({
   addToCart: async (item) => {
     const cart = get().cart;
     const removed: any[] = [];
+    const itemId = getItemId(item);
 
-    if (cart.find((cartItem) => cartItem._id === item._id)) {
+    if (!itemId) {
+      return { removed };
+    }
+
+    if (cart.find((cartItem) => getItemId(cartItem) === itemId)) {
       return { removed };
     }
 
@@ -40,21 +63,31 @@ export const useShopStore = create<ShopState>((set, get) => ({
 
       const removedCourses = newCart.filter(
         (cartItem) =>
-          !cartItem.isCombo && courseIdsInCombo.includes(cartItem._id),
+          !cartItem.isCombo && courseIdsInCombo.includes(getItemId(cartItem)),
       );
 
       newCart = newCart.filter(
         (cartItem) =>
-          cartItem.isCombo || !courseIdsInCombo.includes(cartItem._id),
+          cartItem.isCombo || !courseIdsInCombo.includes(getItemId(cartItem)),
       );
 
       removed.push(...removedCourses);
 
       // Remove from backend (don't await, fire and forget)
       for (const course of removedCourses) {
-        removeFromBackendCart(course._id)
+        const removedId = getItemId(course);
+        if (!removedId) continue;
+
+        removeFromBackendCart(removedId)
           .then(() => console.log(`🗑️ Removed "${course.title}" from backend`))
-          .catch((err) => console.error("Failed to remove from backend:", err));
+          .catch((err) => {
+            if (!isDuplicateCartError(err)) {
+              console.log(
+                "Remove from backend cart failed:",
+                err?.response?.data || err?.message,
+              );
+            }
+          });
       }
     }
 
@@ -64,25 +97,44 @@ export const useShopStore = create<ShopState>((set, get) => ({
 
     // Sync to backend (don't await, fire and forget)
     const productModel = item.isCombo ? "Combo" : "Course";
-    addToBackendCart(item._id, productModel)
+    addToBackendCart(itemId, productModel)
       .then(() =>
-        console.log(`✅ Added "${item.title || item._id}" to backend cart`),
+        console.log(`✅ Added "${item.title || itemId}" to backend cart`),
       )
-      .catch((err) => console.error("❌ Failed to add to backend cart:", err));
+      .catch((err) => {
+        if (isDuplicateCartError(err)) {
+          console.log(
+            "ℹ️ Backend cart already has this item, skipping duplicate add.",
+          );
+          return;
+        }
+
+        console.log(
+          "Add to backend cart failed:",
+          err?.response?.data || err?.message,
+        );
+      });
 
     return { removed };
   },
 
   // ✅ Remove from cart (fire and forget backend sync)
   removeFromCart: async (itemId) => {
-    set({ cart: get().cart.filter((item) => item._id !== itemId) });
+    set({
+      cart: get().cart.filter((item) => getItemId(item) !== itemId),
+    });
 
     // Sync to backend (don't await)
     removeFromBackendCart(itemId)
       .then(() => console.log(`✅ Removed item ${itemId} from backend cart`))
-      .catch((err) =>
-        console.error("❌ Failed to remove from backend cart:", err),
-      );
+      .catch((err) => {
+        if (!isDuplicateCartError(err)) {
+          console.log(
+            "Remove from backend cart failed:",
+            err?.response?.data || err?.message,
+          );
+        }
+      });
   },
 
   clearCart: () => set({ cart: [] }),

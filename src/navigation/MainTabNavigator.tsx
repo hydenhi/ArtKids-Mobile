@@ -3,10 +3,10 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 
 // Import các màn hình
-import HomeScreen from "../screens/Kids/HomeScreen";
 import MyCoursesScreen from "../screens/Kids/MyCoursesScreen";
 import WishlistScreen from "../screens/Kids/WishlistScreen";
 import ProfileScreen from "../screens/Kids/ProfileScreen";
+import HomeScreen from "../screens/Kids/HomeScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -14,7 +14,7 @@ export default function MainTabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerShown: false, // Tắt header của Tab để dùng header riêng của từng màn hình
+        headerShown: false,
         tabBarActiveTintColor: "#FF6B6B",
         tabBarInactiveTintColor: "#B2BEC3",
         tabBarStyle: { paddingBottom: 5, height: 60, backgroundColor: "#FFF" },
