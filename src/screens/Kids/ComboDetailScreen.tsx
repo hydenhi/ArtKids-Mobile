@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -312,6 +313,10 @@ export default function ComboDetailScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F5F6F8" />
+      <View style={styles.bgStrokeOne} />
+      <View style={styles.bgStrokeTwo} />
+
       <CustomToast
         visible={toast.visible}
         message={toast.message}
@@ -437,12 +442,34 @@ export default function ComboDetailScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FDFBF7" },
+  container: { flex: 1, backgroundColor: "#F5F6F8" },
+  bgStrokeOne: {
+    position: "absolute",
+    width: 240,
+    height: 90,
+    borderRadius: 30,
+    backgroundColor: "#FFE9A9",
+    right: -72,
+    top: 88,
+    transform: [{ rotate: "-15deg" }],
+    opacity: 0.68,
+  },
+  bgStrokeTwo: {
+    position: "absolute",
+    width: 180,
+    height: 76,
+    borderRadius: 25,
+    backgroundColor: "#B3E5FC",
+    right: 18,
+    top: 146,
+    transform: [{ rotate: "14deg" }],
+    opacity: 0.55,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FDFBF7",
+    backgroundColor: "#F5F6F8",
   },
   emptyText: {
     fontSize: 15,
@@ -451,12 +478,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 20,
   },
-  headerImageContainer: { position: "relative", width: "100%", height: 280 },
+  headerImageContainer: { position: "relative", width: "100%", height: 300 },
   thumbnail: {
     width: "100%",
     height: "100%",
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
   },
   floatingHeader: {
     position: "absolute",
@@ -464,23 +491,38 @@ const styles = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingHorizontal: 18,
+    paddingTop: 12,
   },
   iconButton: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 20,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: "#E7ECF3",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowColor: "#C9D3DF",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
     elevation: 3,
   },
-  mainInfo: { padding: 20, marginTop: -15 },
+  mainInfo: {
+    padding: 18,
+    marginHorizontal: 14,
+    marginTop: -28,
+    borderRadius: 24,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E8EDF3",
+    shadowColor: "#D5DEE8",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   title: { fontSize: 24, fontWeight: "900", color: "#37474F", marginBottom: 8 },
   description: {
     fontSize: 14,
@@ -499,8 +541,8 @@ const styles = StyleSheet.create({
     color: "#B2BEC3",
     textDecorationLine: "line-through",
   },
-  price: { fontSize: 24, fontWeight: "900", color: "#FF8A80" },
-  contentArea: { paddingHorizontal: 20, paddingBottom: 100 },
+  price: { fontSize: 24, fontWeight: "900", color: "#FB8C00" },
+  contentArea: { paddingHorizontal: 14, paddingBottom: 106 },
   tabContent: { marginTop: 10 },
   sectionTitle: {
     fontSize: 18,
@@ -512,15 +554,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#FFF",
+    backgroundColor: "#FDFEFF",
     padding: 15,
     borderRadius: 15,
     marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E8EDF3",
   },
   courseLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
   iconBox: {
@@ -545,13 +584,15 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: "#FFF",
     padding: 20,
-    paddingBottom: 30,
+    paddingBottom: 24,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     flexDirection: "row",
-    shadowColor: "#000",
+    borderTopWidth: 1,
+    borderTopColor: "#E8EDF3",
+    shadowColor: "#D4DCE6",
     shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.16,
     shadowRadius: 10,
     elevation: 10,
   },
@@ -562,13 +603,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 15,
     borderWidth: 2,
-    borderColor: "#FF8A80",
+    borderColor: "#FBBF24",
     backgroundColor: "#FFF",
     marginLeft: 15,
   },
   buyButton: {
     flex: 1,
-    backgroundColor: "#FF8A80",
+    backgroundColor: "#FFB300",
     paddingVertical: 16,
     borderRadius: 25,
     flexDirection: "row",
@@ -576,5 +617,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   ownedButton: { backgroundColor: "#4CD137", marginRight: 0 },
-  buyButtonText: { color: "#FFF", fontSize: 18, fontWeight: "900" },
+  buyButtonText: { color: "#2F3A43", fontSize: 18, fontWeight: "900" },
 });

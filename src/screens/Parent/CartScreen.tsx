@@ -150,8 +150,35 @@ export default function CartScreen({ navigation }: any) {
     }
   };
 
+  const handleOpenItemDetail = (item: any) => {
+    const itemId = item?._id || item?.id;
+
+    if (!itemId) {
+      Alert.alert("Lỗi", "Không tìm thấy thông tin sản phẩm để mở chi tiết.");
+      return;
+    }
+
+    if (item.isCombo) {
+      navigation.navigate("ComboDetail", {
+        comboId: itemId,
+        slug: item.slug,
+      });
+      return;
+    }
+
+    navigation.navigate("CourseDetail", {
+      courseId: itemId,
+      slug: item.slug,
+    });
+  };
+
   const renderCartItem = ({ item }: { item: any }) => (
-    <View style={styles.cartItem}>
+    <TouchableOpacity
+      style={styles.cartItem}
+      onPress={() => handleOpenItemDetail(item)}
+      activeOpacity={0.9}
+      disabled={isCheckingOut}
+    >
       <Image
         source={{
           uri:
@@ -180,7 +207,7 @@ export default function CartScreen({ navigation }: any) {
           <Ionicons name="trash" size={20} color="#FF8A80" />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
