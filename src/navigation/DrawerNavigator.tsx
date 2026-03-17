@@ -16,8 +16,10 @@ import CartScreen from "../screens/Parent/CartScreen";
 import PaymentWebviewScreen from "../screens/Parent/PaymentWebviewScreen";
 import LearningScreen from "../screens/Kids/LearningScreen";
 import EditProfileScreen from "../screens/Kids/EditProfileScreen";
+import ChangePasswordScreen from "../screens/Kids/ChangePasswordScreen";
 import AllCoursesScreen from "../screens/Kids/AllCoursesScreen";
 import AllCombosScreen from "../screens/Kids/AllCombosScreen";
+import WishlistScreen from "../screens/Kids/WishlistScreen";
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -30,9 +32,11 @@ function LoggedInStack() {
       <Stack.Screen name="CourseDetail" component={CourseDetailScreen} />
       <Stack.Screen name="ComboDetail" component={ComboDetailScreen} />
       <Stack.Screen name="Cart" component={CartScreen} />
+      <Stack.Screen name="Wishlist" component={WishlistScreen} />
       <Stack.Screen name="PaymentWebview" component={PaymentWebviewScreen} />
       <Stack.Screen name="Learning" component={LearningScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="AllCourses" component={AllCoursesScreen} />
       <Stack.Screen name="AllCombos" component={AllCombosScreen} />
     </Stack.Navigator>
@@ -89,6 +93,19 @@ function CustomDrawerContent(props: any) {
         >
           <Ionicons name="book-outline" size={22} color="#546E7A" />
           <Text style={styles.drawerItemText}>Bàn học của bé</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.drawerItem}
+          onPress={() =>
+            props.navigation.navigate("AppStack", {
+              screen: "Tabs",
+              params: { screen: "WishlistTab" },
+            })
+          }
+        >
+          <Ionicons name="heart-outline" size={22} color="#546E7A" />
+          <Text style={styles.drawerItemText}>Yêu thích</Text>
         </TouchableOpacity>
 
         {/* Điều hướng gọi vào AppStack -> Cart */}

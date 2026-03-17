@@ -1,416 +1,874 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   ScrollView,
-  TextInput,
   Image,
   TouchableOpacity,
   ActivityIndicator,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/useAuthStore";
 import axiosClient from "../../api/axiosClient";
 
-const STATIC_CATEGORIES = [
-  { id: "1", title: "Drawing", icon: "pencil", color: "#E8F5E9" },
-  { id: "2", title: "Paint", icon: "color-palette", color: "#FFF9C4" },
-  { id: "3", title: "Sketching", icon: "brush", color: "#E0F7FA" },
-];
-
 export default function HomeScreen({ navigation }: any) {
-  const user = useAuthStore((state) => state.user);
+  useAuthStore((state) => state.user);
+
   const [courses, setCourses] = useState<any[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const testimonials = [
+    {
+      id: "1",
+      text: "Con rất thích vẽ khủng long! Bài học dễ hiểu và mẹ bảo tranh của con tiến bộ rõ rệt.",
+      author: "Bé Leo, 7 tuổi",
+    },
+    {
+      id: "2",
+      text: "Cô giáo giúp con hoàn thành bộ màu nước đầu tiên. Con rất tự hào về bức tranh của mình!",
+      author: "Bé Mia, 8 tuổi",
+    },
+  ];
 
   useEffect(() => {
     const fetchHomeData = async () => {
       try {
         setLoading(true);
+
         const [courseRes, comboRes] = await Promise.all([
-          axiosClient.get("/courses"),
-          axiosClient.get("/combos"),
+          axiosClient.get("/courses", { params: { status: "published" } }),
+          axiosClient.get("/combos", { params: { status: "published" } }),
         ]);
+
         const coursesData = courseRes.data?.courses || courseRes.data || [];
         const combosData = comboRes.data?.combos || comboRes.data || [];
-        setCourses(coursesData);
-        setCombos(combosData);
+
+        setCourses(coursesData.slice(0, 8));
+        setCombos(combosData.slice(0, 6));
       } catch (error: any) {
-        console.log("❌ Lỗi kết nối Backend: ", error.message);
+        console.log("Lỗi kết nối Backend: ", error.message);
       } finally {
         setLoading(false);
       }
     };
+
     fetchHomeData();
   }, []);
 
-  const SmallCourseCard = ({ item, isCombo = false }: any) => (
+  const featuredCourse = courses[0];
+  const miniCourses = courses.slice(1, 3);
+  const featuredCombo = combos[0];
+  const miniCombos = combos.slice(1, 3);
+
+  const getOldPrice = (item: any) =>
+    Number(item?.oldPrice || item?.originalPrice || 0);
+
+  const getPrice = (item: any) => Number(item?.price || 0);
+
+  const getCourseDiscountPercent = (item: any) => {
+    const oldPrice = getOldPrice(item);
+    const price = getPrice(item);
+    if (!oldPrice || oldPrice <= price) return 0;
+    return Math.round(((oldPrice - price) / oldPrice) * 100);
+  };
+
+  const getComboDiscountPercent = (item: any) =>
+    Number(item?.discountPercentage || 0);
+
+  const formatPrice = (value: number) =>
+    value === 0 ? "Miễn phí" : `${value.toLocaleString("vi-VN")} đ`;
+
+  const openCourse = (course: any) => {
+    if (!course) return;
+    navigation.navigate("CourseDetail", {
+      courseId: course._id || course.id,
+      slug: course.slug,
+    });
+  };
+
+  const openCombo = (combo: any) => {
+    if (!combo) return;
+    navigation.navigate("ComboDetail", {
+      comboId: combo._id || combo.id,
+      slug: combo.slug,
+    });
+  };
+
+  const renderMiniCard = (item: any, index: number) => (
     <TouchableOpacity
-      style={styles.card}
-      onPress={() =>
-        isCombo
-          ? navigation.navigate("ComboDetail", {
-              comboId: item._id || item.id,
-              slug: item.slug,
-            })
-          : navigation.navigate("CourseDetail", {
-              courseId: item._id || item.id,
-              slug: item.slug,
-            })
-      }
+      key={item?._id || item?.id || `mini-${index}`}
+      style={styles.miniCard}
+      activeOpacity={0.9}
+      onPress={() => openCourse(item)}
     >
-      <Image
-        source={{
-          uri:
-            item.thumbnail ||
-            "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400",
-        }}
-        style={styles.cardImage}
-      />
-      <View style={styles.cardInfo}>
-        <Text style={styles.cardTitle} numberOfLines={2}>
-          {item.title}
-        </Text>
-        <View style={styles.cardBottom}>
-          <Text style={styles.cardPrice}>
-            {item.price === 0
-              ? "Miễn phí"
-              : `${item.price?.toLocaleString("vi-VN")} đ`}
-          </Text>
-          <View style={styles.ratingBadge}>
-            <Ionicons name="star" size={12} color="#FFA000" />
-            <Text style={styles.ratingText}>{item.averageRating ?? "5.0"}</Text>
-          </View>
+      <View style={styles.miniCardImageWrap}>
+        <Image
+          source={{
+            uri:
+              item?.thumbnail ||
+              "https://placehold.co/200x200/FEE9A8/F57F17?text=ArtKids",
+          }}
+          style={styles.miniCardImage}
+        />
+
+        <View style={styles.miniCardIconWrap}>
+          <Ionicons
+            name={index % 2 === 0 ? "color-palette" : "image"}
+            size={20}
+            color={index % 2 === 0 ? "#FFB300" : "#4DB6AC"}
+          />
         </View>
+
+        {getCourseDiscountPercent(item) > 0 && (
+          <View style={styles.miniDiscountBadge}>
+            <Text style={styles.miniDiscountText}>
+              -{getCourseDiscountPercent(item)}%
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <Text style={styles.miniCardTitle} numberOfLines={1}>
+        {item?.title || "Khóa học sáng tạo"}
+      </Text>
+      <Text style={styles.miniCardSubtitle}>Xưởng nghệ thuật</Text>
+      <View style={styles.miniPriceRow}>
+        <Text style={styles.miniPriceText}>{formatPrice(getPrice(item))}</Text>
+        {getOldPrice(item) > getPrice(item) && (
+          <Text style={styles.miniOldPriceText}>
+            {formatPrice(getOldPrice(item))}
+          </Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderComboMiniCard = (item: any, index: number) => (
+    <TouchableOpacity
+      key={item?._id || item?.id || `mini-combo-${index}`}
+      style={styles.comboMiniCard}
+      activeOpacity={0.9}
+      onPress={() => openCombo(item)}
+    >
+      <View style={styles.comboMiniCardImageWrap}>
+        <Image
+          source={{
+            uri:
+              item?.thumbnail ||
+              item?.courses?.[0]?.thumbnail ||
+              "https://placehold.co/200x200/FFE0B2/EF6C00?text=Combo",
+          }}
+          style={styles.comboMiniCardImage}
+        />
+
+        <View style={styles.comboMiniCardIconWrap}>
+          <Ionicons
+            name={index % 2 === 0 ? "layers" : "gift"}
+            size={20}
+            color="#FB8C00"
+          />
+        </View>
+
+        {getComboDiscountPercent(item) > 0 && (
+          <View style={styles.comboMiniDiscountBadge}>
+            <Text style={styles.comboMiniDiscountText}>
+              -{getComboDiscountPercent(item)}%
+            </Text>
+          </View>
+        )}
+      </View>
+
+      <Text style={styles.comboMiniCardTitle} numberOfLines={1}>
+        {item?.title || "Combo sáng tạo"}
+      </Text>
+      <Text style={styles.comboMiniCardSubtitle}>
+        Tiết kiệm hơn khi mua nhóm
+      </Text>
+      <View style={styles.miniPriceRow}>
+        <Text style={styles.comboMiniPriceText}>
+          {formatPrice(getPrice(item))}
+        </Text>
+        {getOldPrice(item) > getPrice(item) && (
+          <Text style={styles.miniOldPriceText}>
+            {formatPrice(getOldPrice(item))}
+          </Text>
+        )}
       </View>
     </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.userInfo}>
-          {/* NÚT DRAWER ĐÃ BỊ XÓA Ở ĐÂY */}
-          <Image
-            source={{
-              uri:
-                user?.avatar ||
-                "https://cdn-icons-png.flaticon.com/512/4140/4140048.png",
-            }}
-            style={styles.avatar}
-          />
-          <Text style={styles.greeting}>
-            Xin chào, {user?.fullname?.split(" ")[0] || "Bé"}!
-          </Text>
-        </View>
+      <StatusBar barStyle="dark-content" backgroundColor="#F5F6F8" />
 
-        <View style={styles.headerIcons}>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => navigation.navigate("Cart")}
-          >
-            <Ionicons name="cart-outline" size={24} color="#FF8A80" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Ionicons name="notifications-outline" size={24} color="#90A4AE" />
-            <View style={styles.notificationDot} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      <View style={styles.bgStrokeOne} />
+      <View style={styles.bgStrokeTwo} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.searchContainer}>
-          <Ionicons
-            name="search"
-            size={20}
-            color="#90A4AE"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Tìm khóa học nghệ thuật..."
-            placeholderTextColor="#90A4AE"
-          />
-        </View>
-
-        <View style={styles.bannerContainer}>
-          <Text style={styles.bannerTitle}>
-            Chào mừng đến với{"\n"}Thế giới Nghệ thuật!
-          </Text>
-          <TouchableOpacity style={styles.bannerBtn}>
-            <Text style={styles.bannerBtnText}>Khám phá ngay</Text>
-          </TouchableOpacity>
-          <Image
-            source={{
-              uri: "https://cdn-icons-png.flaticon.com/512/3069/3069172.png",
-            }}
-            style={styles.bannerMascot}
-          />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Khám phá danh mục</Text>
-          <View style={styles.categoriesRow}>
-            {STATIC_CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                style={[styles.categoryItem, { backgroundColor: cat.color }]}
-              >
-                <Ionicons name={cat.icon as any} size={28} color="#546E7A" />
-                <Text style={styles.categoryText}>{cat.title}</Text>
-              </TouchableOpacity>
-            ))}
+        <View style={styles.topBar}>
+          <View style={styles.brandWrap}>
+            <Text style={styles.brandText}>ArtKids</Text>
           </View>
+          <TouchableOpacity
+            style={styles.topCartBtn}
+            onPress={() => navigation.navigate("Cart")}
+          >
+            <Ionicons name="cart-outline" size={22} color="#2F3A43" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.heroSection}>
+          <Text style={styles.heroTitle}>
+            Đánh thức chất{"\n"}
+            <Text style={styles.heroTitleHighlight}>Nghệ Sĩ Nhí</Text>
+          </Text>
+          <Text style={styles.heroSubtitle}>
+            Mỗi bé đều là một nghệ sĩ. Bắt đầu hành trình sáng tạo với những bài
+            học đầy hứng thú!
+          </Text>
+
+          <TouchableOpacity
+            style={styles.heroButton}
+            onPress={() => navigation.navigate("AllCourses")}
+          >
+            <Text style={styles.heroButtonText}>Bắt đầu ngay</Text>
+            <Ionicons name="rocket" size={15} color="#2F3A43" />
+          </TouchableOpacity>
+
+          <View style={styles.heroArtWrap}>
+            <Image
+              source={require("../../../assets/hero-img.jpg")}
+              style={styles.heroArtImage}
+            />
+          </View>
+        </View>
+
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Khóa học nổi bật</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("AllCourses")}>
+            <Text style={styles.seeAllText}>Xem tất cả</Text>
+          </TouchableOpacity>
         </View>
 
         {loading ? (
           <ActivityIndicator
             size="large"
-            color="#FF8A80"
-            style={{ marginTop: 50 }}
+            color="#FFB300"
+            style={{ marginTop: 30 }}
           />
         ) : (
           <>
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Khóa học mới</Text>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("AllCourses")}
-                >
-                  <Text style={styles.seeAllText}>Xem tất cả</Text>
-                </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.featureCard}
+              activeOpacity={0.9}
+              onPress={() => openCourse(featuredCourse)}
+            >
+              <View style={styles.featureBadge}>
+                <Ionicons name="sparkles-outline" size={11} color="#7A6F52" />
+                <Text style={styles.featureBadgeText}>4-10 tuổi</Text>
               </View>
-              <FlatList
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                data={courses}
-                keyExtractor={(item) => item._id || Math.random().toString()}
-                renderItem={({ item }) => <SmallCourseCard item={item} />}
-                contentContainerStyle={{ paddingLeft: 20, paddingBottom: 10 }}
-                ListEmptyComponent={
-                  <Text style={{ marginLeft: 20, color: "#999" }}>
-                    Chưa có khóa học nào
+              {getCourseDiscountPercent(featuredCourse) > 0 && (
+                <View style={styles.featureDiscountBadge}>
+                  <Text style={styles.featureDiscountText}>
+                    -{getCourseDiscountPercent(featuredCourse)}%
                   </Text>
-                }
-              />
-            </View>
+                </View>
+              )}
+              <Text style={styles.featureTitle} numberOfLines={1}>
+                {featuredCourse?.title || "Màu nước diệu kỳ"}
+              </Text>
+              <Text style={styles.featureSubtitle}>
+                Cùng bé khám phá sắc màu
+              </Text>
 
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Combo phổ biến</Text>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("AllCombos")}
-                >
-                  <Text style={styles.seeAllText}>Xem tất cả</Text>
-                </TouchableOpacity>
-              </View>
-              <FlatList
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                data={combos}
-                keyExtractor={(item) => item._id || Math.random().toString()}
-                renderItem={({ item }) => (
-                  <SmallCourseCard item={item} isCombo={true} />
-                )}
-                contentContainerStyle={{ paddingLeft: 20, paddingBottom: 20 }}
-                ListEmptyComponent={
-                  <Text style={{ marginLeft: 20, color: "#999" }}>
-                    Chưa có combo nào
+              <View style={styles.featurePriceRow}>
+                <Text style={styles.featurePriceText}>
+                  {formatPrice(getPrice(featuredCourse))}
+                </Text>
+                {getOldPrice(featuredCourse) > getPrice(featuredCourse) && (
+                  <Text style={styles.featureOldPriceText}>
+                    {formatPrice(getOldPrice(featuredCourse))}
                   </Text>
-                }
+                )}
+              </View>
+
+              <Image
+                source={{
+                  uri:
+                    featuredCourse?.thumbnail ||
+                    "https://placehold.co/180x180/B3E5FC/0277BD?text=Paint",
+                }}
+                style={styles.featureImage}
               />
+            </TouchableOpacity>
+
+            <View style={styles.miniCardRow}>
+              {(miniCourses.length > 0 ? miniCourses : [{}, {}]).map(
+                (item: any, index: number) => renderMiniCard(item, index),
+              )}
             </View>
           </>
         )}
+
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Combo nổi bật</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("AllCombos")}>
+            <Text style={styles.seeAllText}>Xem tất cả</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={styles.comboFeatureCard}
+          activeOpacity={0.9}
+          onPress={() => openCombo(featuredCombo)}
+        >
+          <View style={styles.featureBadge}>
+            <Ionicons name="sparkles-outline" size={11} color="#7A6F52" />
+            <Text style={styles.featureBadgeText}>Combo tiết kiệm</Text>
+          </View>
+          {getComboDiscountPercent(featuredCombo) > 0 && (
+            <View style={styles.comboFeatureDiscountBadge}>
+              <Text style={styles.comboFeatureDiscountText}>
+                -{getComboDiscountPercent(featuredCombo)}%
+              </Text>
+            </View>
+          )}
+
+          <Text style={styles.comboFeatureTitle} numberOfLines={1}>
+            {featuredCombo?.title || "Combo sáng tạo thông minh"}
+          </Text>
+          <Text style={styles.comboFeatureSubtitle}>
+            Nhiều khóa học, giá ưu đãi hơn
+          </Text>
+
+          <View style={styles.featurePriceRow}>
+            <Text style={styles.comboFeaturePriceText}>
+              {formatPrice(getPrice(featuredCombo))}
+            </Text>
+            {getOldPrice(featuredCombo) > getPrice(featuredCombo) && (
+              <Text style={styles.featureOldPriceText}>
+                {formatPrice(getOldPrice(featuredCombo))}
+              </Text>
+            )}
+          </View>
+
+          <Image
+            source={{
+              uri:
+                featuredCombo?.thumbnail ||
+                featuredCombo?.courses?.[0]?.thumbnail ||
+                "https://placehold.co/180x180/FFE0B2/EF6C00?text=Combo",
+            }}
+            style={styles.featureImage}
+          />
+        </TouchableOpacity>
+
+        <View style={styles.comboMiniCardRow}>
+          {(miniCombos.length > 0 ? miniCombos : [{}, {}]).map(
+            (item: any, index: number) => renderComboMiniCard(item, index),
+          )}
+        </View>
+
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Bé nói gì về ArtKids...</Text>
+        </View>
+
+        {testimonials.map((item) => (
+          <View key={item.id} style={styles.testimonialCard}>
+            <View style={styles.quoteRow}>
+              <Ionicons name="star" size={12} color="#FFCA28" />
+              <Ionicons name="star" size={12} color="#FFCA28" />
+              <Ionicons name="star" size={12} color="#FFCA28" />
+              <Ionicons name="star" size={12} color="#FFCA28" />
+              <Ionicons name="star" size={12} color="#FFCA28" />
+            </View>
+
+            <Text style={styles.testimonialText}>{item.text}</Text>
+
+            <View style={styles.testimonialAuthorRow}>
+              <Ionicons name="happy-outline" size={16} color="#2F3A43" />
+              <Text style={styles.testimonialAuthor}>{item.author}</Text>
+            </View>
+          </View>
+        ))}
+
+        <View style={{ height: 18 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FDFBF7" },
-  scrollContent: { paddingBottom: 80 },
-  header: {
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F6F8",
+  },
+  bgStrokeOne: {
+    position: "absolute",
+    width: 220,
+    height: 90,
+    borderRadius: 28,
+    backgroundColor: "#FFE9A9",
+    right: -70,
+    top: 92,
+    transform: [{ rotate: "-18deg" }],
+    opacity: 0.72,
+  },
+  bgStrokeTwo: {
+    position: "absolute",
+    width: 180,
+    height: 78,
+    borderRadius: 26,
+    backgroundColor: "#B3E5FC",
+    right: 16,
+    top: 148,
+    transform: [{ rotate: "14deg" }],
+    opacity: 0.58,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  topBar: {
+    marginTop: 8,
+    marginBottom: 20,
+    minHeight: 52,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 15,
   },
-  userInfo: { flexDirection: "row", alignItems: "center" },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFE082",
-    borderWidth: 2,
-    borderColor: "#FFF",
+  brandWrap: {
+    paddingHorizontal: 8,
   },
-  greeting: {
+  brandText: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#455A64",
-    marginLeft: 10,
+    fontWeight: "800",
+    color: "#2F3A43",
   },
-  headerIcons: { flexDirection: "row", alignItems: "center" },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    backgroundColor: "#FFF",
-    borderRadius: 20,
+  topCartBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-    marginLeft: 10,
-  },
-  notificationDot: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    backgroundColor: "#FF5252",
-    borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#FFF",
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFF",
-    marginHorizontal: 20,
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    height: 50,
-    shadowColor: "#000",
+    borderColor: "#E6EAF0",
+    shadowColor: "#D4DCE6",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowOpacity: 0.24,
+    shadowRadius: 6,
     elevation: 3,
   },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontSize: 16, color: "#455A64" },
-  bannerContainer: {
-    backgroundColor: "#E0F7FA",
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderRadius: 20,
-    padding: 20,
+  heroSection: {
+    marginBottom: 20,
     position: "relative",
-    overflow: "hidden",
+    minHeight: 185,
   },
-  bannerTitle: {
-    fontSize: 18,
+  heroTitle: {
+    fontSize: 44,
+    lineHeight: 47,
     fontWeight: "900",
-    color: "#006064",
-    lineHeight: 26,
-    zIndex: 2,
+    color: "#21272D",
+    letterSpacing: -0.7,
   },
-  bannerBtn: {
-    backgroundColor: "#FFCC80",
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 20,
+  heroTitleHighlight: {
+    color: "#F0A81B",
+  },
+  heroSubtitle: {
+    marginTop: 10,
+    width: "63%",
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#66727C",
+    fontWeight: "500",
+  },
+  heroButton: {
+    marginTop: 14,
     alignSelf: "flex-start",
-    marginTop: 15,
-    zIndex: 2,
-  },
-  bannerBtnText: { color: "#BF360C", fontWeight: "bold", fontSize: 12 },
-  bannerMascot: {
-    position: "absolute",
-    right: -10,
-    bottom: -10,
-    width: 120,
-    height: 120,
-    zIndex: 1,
-    opacity: 0.9,
-  },
-  section: { marginTop: 25 },
-  sectionHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    marginBottom: 15,
+    gap: 6,
+    backgroundColor: "#FFB300",
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: "#F49B00",
+    shadowColor: "#F9A825",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  heroButtonText: {
+    color: "#2F3A43",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  heroArtWrap: {
+    position: "absolute",
+    right: 8,
+    top: 24,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(255,255,255,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroArtImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+  },
+  sectionHeaderRow: {
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#37474F",
-    marginLeft: 20,
+    marginTop: 12,
+    fontSize: 20,
+    color: "#222D35",
+    fontWeight: "800",
+    letterSpacing: -0.3,
   },
-  seeAllText: { fontSize: 14, color: "#90A4AE", fontWeight: "600" },
-  categoriesRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginTop: 15,
+  seeAllText: {
+    fontSize: 11,
+    color: "#5C9EBB",
+    fontWeight: "700",
   },
-  categoryItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 20,
-    borderRadius: 20,
-    marginHorizontal: 5,
-  },
-  categoryText: {
-    marginTop: 8,
-    fontSize: 13,
-    fontWeight: "bold",
-    color: "#546E7A",
-  },
-  card: {
-    backgroundColor: "#FFF",
-    width: 150,
-    borderRadius: 20,
-    marginRight: 15,
-    padding: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.05,
+  featureCard: {
+    backgroundColor: "#DAF3FF",
+    borderRadius: 28,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 150,
+    borderWidth: 1,
+    borderColor: "#BDE6FA",
+    shadowColor: "#9AD8F5",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
     shadowRadius: 10,
+    elevation: 4,
+  },
+  featureBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: 12,
+    backgroundColor: "#EDF9FF",
+    borderWidth: 1,
+    borderColor: "#C9EAF8",
+    gap: 4,
+  },
+  featureBadgeText: {
+    color: "#7A6F52",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  featureTitle: {
+    marginTop: 10,
+    fontSize: 23,
+    color: "#23323E",
+    fontWeight: "900",
+    width: "62%",
+  },
+  featureSubtitle: {
+    marginTop: 2,
+    color: "#7F95A3",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  featureImage: {
+    position: "absolute",
+    right: 12,
+    bottom: 10,
+    width: 86,
+    height: 86,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 5,
+    borderColor: "#E8F7FF",
+  },
+  featureDiscountBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "#EF5350",
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  featureDiscountText: {
+    color: "#FFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  featurePriceRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  featurePriceText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1F2937",
+  },
+  featureOldPriceText: {
+    fontSize: 12,
+    color: "#90A4AE",
+    textDecorationLine: "line-through",
+    fontWeight: "700",
+  },
+  miniCardRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 12,
+  },
+  miniCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#ECEFF4",
+    shadowColor: "#D8DEE8",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
     elevation: 3,
   },
-  cardImage: {
-    width: "100%",
-    height: 110,
+  miniCardIconWrap: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    zIndex: 3,
+    width: 30,
+    height: 30,
     borderRadius: 15,
-    backgroundColor: "#F5F5F5",
-  },
-  cardInfo: { marginTop: 10 },
-  cardTitle: { fontSize: 14, fontWeight: "bold", color: "#37474F", height: 40 },
-  cardBottom: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    backgroundColor: "rgba(255,255,255,0.9)",
     alignItems: "center",
-    marginTop: 5,
+    justifyContent: "center",
   },
-  cardPrice: { fontSize: 15, fontWeight: "900", color: "#FF8A80" },
-  ratingBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFF9C4",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
+  miniCardImageWrap: {
+    position: "relative",
+    marginBottom: 8,
   },
-  ratingText: {
+  miniCardImage: {
+    width: "100%",
+    height: 94,
+    borderRadius: 16,
+    backgroundColor: "#F7F9FC",
+  },
+  miniCardTitle: {
+    marginTop: 8,
     fontSize: 12,
-    fontWeight: "bold",
-    color: "#FFA000",
-    marginLeft: 3,
+    fontWeight: "800",
+    color: "#2A343D",
+  },
+  miniCardSubtitle: {
+    marginTop: 2,
+    fontSize: 10,
+    color: "#8A98A4",
+    fontWeight: "600",
+  },
+  miniDiscountBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 3,
+    backgroundColor: "#EF5350",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  miniDiscountText: {
+    color: "#FFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  miniPriceRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  miniPriceText: {
+    fontSize: 12,
+    color: "#1F2937",
+    fontWeight: "800",
+  },
+  miniOldPriceText: {
+    fontSize: 10,
+    color: "#90A4AE",
+    textDecorationLine: "line-through",
+    fontWeight: "700",
+  },
+  comboFeatureCard: {
+    backgroundColor: "#FFF1E6",
+    borderRadius: 28,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 150,
+    borderWidth: 1,
+    borderColor: "#FFD8BC",
+    shadowColor: "#FFCCA8",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 4,
+    marginBottom: 12,
+  },
+  comboFeatureDiscountBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "#FB8C00",
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  comboFeatureDiscountText: {
+    color: "#FFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  comboFeatureTitle: {
+    marginTop: 10,
+    fontSize: 23,
+    color: "#6D3A00",
+    fontWeight: "900",
+    width: "62%",
+  },
+  comboFeatureSubtitle: {
+    marginTop: 2,
+    color: "#9A6B3D",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  comboFeaturePriceText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#E65100",
+  },
+  comboMiniCardRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 12,
+  },
+  comboMiniCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#FFE0B2",
+    shadowColor: "#FFD3A1",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  comboMiniDiscountBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 3,
+    backgroundColor: "#FB8C00",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  comboMiniDiscountText: {
+    color: "#FFF",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  comboMiniCardIconWrap: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    zIndex: 3,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  comboMiniCardImageWrap: {
+    position: "relative",
+    marginBottom: 8,
+  },
+  comboMiniCardImage: {
+    width: "100%",
+    height: 94,
+    borderRadius: 16,
+    backgroundColor: "#FFF8F0",
+  },
+  comboMiniCardTitle: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#8D4E12",
+    fontWeight: "800",
+  },
+  comboMiniCardSubtitle: {
+    marginTop: 2,
+    fontSize: 10,
+    color: "#B07C47",
+    fontWeight: "600",
+  },
+  comboMiniPriceText: {
+    fontSize: 12,
+    color: "#E65100",
+    fontWeight: "800",
+  },
+  testimonialCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E9EDF3",
+    marginBottom: 12,
+    shadowColor: "#DCE2EB",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 7,
+    elevation: 3,
+  },
+  quoteRow: {
+    flexDirection: "row",
+    gap: 2,
+    marginBottom: 10,
+  },
+  testimonialText: {
+    color: "#66727C",
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: "500",
+  },
+  testimonialAuthorRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  testimonialAuthor: {
+    color: "#2F3A43",
+    fontSize: 11,
+    fontWeight: "800",
   },
 });

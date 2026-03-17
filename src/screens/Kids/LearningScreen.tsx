@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import YoutubePlayer from "react-native-youtube-iframe";
+import { getCourseProgress, markLessonComplete } from "../../api/lessonService";
 
 // Hàm trích xuất ID youtube từ URL HOẶC trả về nguyên ID nếu đã là ID
 const getYouTubeId = (rawUrl: string) => {
@@ -32,8 +33,10 @@ const getYouTubeId = (rawUrl: string) => {
 export default function LearningScreen({ route, navigation }: any) {
   const {
     courseTitle = "Khóa học nghệ thuật",
+    courseId = null,
     sections = [],
     initialLesson = null,
+    isEnrolled = false, // Tiếp nhận trạng thái sở hữu
   } = route.params || {};
 
   // Trải phẳng (flatten) tất cả các bài học từ các phần để dễ điều hướng (Prev/Next)
@@ -44,8 +47,30 @@ export default function LearningScreen({ route, navigation }: any) {
   const [currentLesson, setCurrentLesson] = useState<any>(
     initialLesson || allLessons[0] || null,
   );
-
   const [playing, setPlaying] = useState(false);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
+  const playerRef = useRef<any>(null);
+  const progressCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Fetch tiến độ khóa học
+  const fetchProgress = async () => {
+    if (!courseId || !isEnrolled) return; // Chỉ fetch tiến độ nếu đã mua khóa học
+    try {
+      const res = await getCourseProgress(courseId);
+      if (res.success) {
+        const normalizedIds = (res.data || []).map((item: any) =>
+          typeof item.lesson === "string" ? item.lesson : item.lesson?._id,
+        );
+        setCompletedLessonIds(normalizedIds.filter(Boolean));
+      }
+    } catch (error) {
+      console.error("Fetch progress error:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchProgress();
+  }, [courseId, isEnrolled]);
 
   // Tìm vị trí bài học hiện tại trong danh sách phẳng
   const currentIndex = currentLesson
@@ -55,35 +80,141 @@ export default function LearningScreen({ route, navigation }: any) {
   const hasNext = currentIndex !== -1 && currentIndex < allLessons.length - 1;
   const hasPrev = currentIndex > 0;
 
+  // Kiểm tra quyền xem bài học
+  const checkAccess = (lesson: any) => {
+    if (isEnrolled || lesson.isTrial) return true;
+    return false;
+  };
+
   const handleNext = () => {
     if (hasNext) {
-      setCurrentLesson(allLessons[currentIndex + 1]);
+      const nextLesson = allLessons[currentIndex + 1];
+      if (checkAccess(nextLesson)) {
+        setCurrentLesson(nextLesson);
+      } else {
+        Alert.alert(
+          "Khóa học bị khóa 🔒",
+          "Bé phải nhờ bố mẹ mua khóa học đầy đủ để xem được các bài học tiếp theo nhé!",
+        );
+      }
     } else {
-      Alert.alert("Hoàn thành! 🎉", "Tuyệt vời, bạn đã xem hết khóa học này!");
+      Alert.alert("Hoàn thành!", "Tuyệt vời, bạn đã xem hết khóa học này!");
     }
   };
 
   const handlePrev = () => {
     if (hasPrev) {
-      setCurrentLesson(allLessons[currentIndex - 1]);
+      const prevLesson = allLessons[currentIndex - 1];
+      if (checkAccess(prevLesson)) {
+        setCurrentLesson(prevLesson);
+      } else {
+        Alert.alert(
+          "Bài học bị khóa 🔒",
+          "Nội dung này yêu cầu đăng ký khóa học để xem lại ạ.",
+        );
+      }
     }
   };
 
   const handleSelectLesson = (lesson: any) => {
-    // Tạm thời bỏ qua vụ "locked/completed" vì API hiện tại chưa hỗ trợ tiến độ học tập chi tiết của từng user.
-    // Ai đã vào màn hình này coi như học được hết.
-    setCurrentLesson(lesson);
+    if (checkAccess(lesson)) {
+      setCurrentLesson(lesson);
+    } else {
+      Alert.alert(
+        "Khóa học bị khóa 🔒",
+        "Bé hãy nhờ bố mẹ mua khóa học đầy đủ để mở bài học này nhé!",
+      );
+    }
   };
 
-  const onStateChange = useCallback(
-    (state: string) => {
-      if (state === "ended") {
-        setPlaying(false);
-        // Bạn có thể tự động chuyển bài ở đây nếu muốn bằng cách gọi handleNext()
+  const markCurrentLessonComplete = useCallback(
+    async (lessonId?: string) => {
+      if (!lessonId || !isEnrolled || completedLessonIds.includes(lessonId)) {
+        return;
+      }
+
+      try {
+        const res = await markLessonComplete(lessonId);
+        if (res.success) {
+          setCompletedLessonIds((prev) =>
+            prev.includes(lessonId) ? prev : [...prev, lessonId],
+          );
+        }
+      } catch (error) {
+        console.error("Mark lesson complete error:", error);
       }
     },
-    [currentIndex, allLessons],
+    [isEnrolled, completedLessonIds],
   );
+
+  const onStateChange = useCallback(
+    async (state: string) => {
+      if (state === "playing") {
+        setPlaying(true);
+      }
+
+      if (state === "paused" || state === "ended") {
+        setPlaying(false);
+      }
+
+      if (state !== "ended") return;
+
+      // Đánh dấu hoàn thành bài học khi xem xong
+      await markCurrentLessonComplete(currentLesson?._id);
+
+      // Tự động chuyển bài tiếp theo nếu có thể
+      if (hasNext) {
+        const nextLesson = allLessons[currentIndex + 1];
+        if (checkAccess(nextLesson)) {
+          setCurrentLesson(nextLesson);
+        }
+      } else {
+        Alert.alert("Hoàn thành!", "Tuyệt vời, bạn đã xem hết khóa học này!");
+      }
+    },
+    [
+      currentLesson,
+      hasNext,
+      allLessons,
+      currentIndex,
+      markCurrentLessonComplete,
+    ],
+  );
+
+  useEffect(() => {
+    if (!playing || !currentLesson?._id || !isEnrolled) {
+      if (progressCheckRef.current) {
+        clearInterval(progressCheckRef.current);
+        progressCheckRef.current = null;
+      }
+      return;
+    }
+
+    progressCheckRef.current = setInterval(async () => {
+      try {
+        const duration = await playerRef.current?.getDuration?.();
+        const currentTime = await playerRef.current?.getCurrentTime?.();
+
+        if (!duration || duration <= 0 || currentTime == null) {
+          return;
+        }
+
+        const watchedPercent = (currentTime / duration) * 100;
+        if (watchedPercent >= 75) {
+          await markCurrentLessonComplete(currentLesson._id);
+        }
+      } catch (error) {
+        // Bỏ qua lỗi tạm thời do player chưa sẵn sàng
+      }
+    }, 2500);
+
+    return () => {
+      if (progressCheckRef.current) {
+        clearInterval(progressCheckRef.current);
+        progressCheckRef.current = null;
+      }
+    };
+  }, [playing, currentLesson?._id, isEnrolled, markCurrentLessonComplete]);
 
   const youtubeId = currentLesson
     ? getYouTubeId(currentLesson.videoUrl || currentLesson.url)
@@ -112,6 +243,7 @@ export default function LearningScreen({ route, navigation }: any) {
         <View style={styles.videoContainer}>
           {youtubeId ? (
             <YoutubePlayer
+              ref={playerRef}
               height={220}
               play={playing}
               videoId={youtubeId}
@@ -144,6 +276,9 @@ export default function LearningScreen({ route, navigation }: any) {
         <View style={styles.lessonListContainer}>
           <View style={styles.listHeader}>
             <Text style={styles.listTitle}>Danh sách bài giảng</Text>
+            <Text style={styles.completedCounter}>
+              Hoàn thành: {completedLessonIds.length}/{allLessons.length}
+            </Text>
           </View>
 
           {sections.map((section: any, sIdx: number) => {
@@ -171,8 +306,20 @@ export default function LearningScreen({ route, navigation }: any) {
                             size={24}
                             color="#FF8A80"
                           />
-                        ) : (
+                        ) : completedLessonIds.includes(lesson._id) ? (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={24}
+                            color="#00B894"
+                          />
+                        ) : isEnrolled || lesson.isTrial ? (
                           <View style={styles.circleOutline} />
+                        ) : (
+                          <Ionicons
+                            name="lock-closed"
+                            size={20}
+                            color="#B2BEC3"
+                          />
                         )}
 
                         <Text
@@ -294,6 +441,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   listTitle: { fontSize: 18, fontWeight: "bold", color: "#37474F" },
+  completedCounter: {
+    fontSize: 13,
+    color: "#00B894",
+    fontWeight: "700",
+  },
 
   sectionBlock: {
     marginTop: 15,

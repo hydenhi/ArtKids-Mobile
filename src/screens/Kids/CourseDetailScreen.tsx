@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,12 +8,23 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DrawerActions } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import axiosClient from "../../api/axiosClient";
 import { useShopStore } from "../../store/useShopStore";
+import { useFocusEffect } from "@react-navigation/native";
+import { createPayment } from "../../api/paymentService";
+import { getCourseProgress } from "../../api/lessonService";
+
+// IMPORT CUSTOM TOAST
+import CustomToast from "../../components/CustomToast";
 
 export default function CourseDetailScreen({ route, navigation }: any) {
   const { courseId, slug } = route.params || {};
@@ -22,86 +33,251 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   const [course, setCourse] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const isFirstMount = useRef(true);
+
   const [isEnrolled, setIsEnrolled] = useState(false);
+  const [courseInComboWarning, setCourseInComboWarning] = useState<
+    string | null
+  >(null);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
 
+  // --- STATE CHO CHỨC NĂNG ĐÁNH GIÁ ---
+  const [isReviewModalVisible, setIsReviewModalVisible] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  // STATE ĐỂ QUẢN LÝ THÔNG BÁO (TOAST)
+  const [toast, setToast] = useState({
+    visible: false,
+    message: "",
+    type: "success" as any,
+  });
+
+  // =========================================================
+  // FIX LỖI REACTIVE (TRÁI TIM ĐỔI MÀU NGAY LẬP TỨC)
+  // Phải lắng nghe trực tiếp mảng wishlist và cart từ Zustand
+  // =========================================================
   const toggleWishlist = useShopStore((state) => state.toggleWishlist);
-  const isInWishlist = useShopStore((state) => state.isInWishlist);
   const addToCart = useShopStore((state) => state.addToCart);
-  const isInCart = useShopStore((state) => state.isInCart);
+  const getCourseIdsInCombos = useShopStore(
+    (state) => state.getCourseIdsInCombos,
+  );
 
-  const isLiked = course ? isInWishlist(course._id) : false;
-  const alreadyInCart = course ? isInCart(course._id) : false;
+  const wishlist = useShopStore((state) => state.wishlist);
+  const cart = useShopStore((state) => state.cart);
+
+  const isLiked = course
+    ? wishlist.some((item: any) => item._id === course._id)
+    : false;
+  const alreadyInCart = course
+    ? cart.some((item: any) => item._id === course._id)
+    : false;
+  const isCourseInCombo = course
+    ? getCourseIdsInCombos().includes(course._id)
+    : false;
+
+  // HÀM HIỂN THỊ TOAST TỰ ẨN SAU 2 GIÂY
+  const showToast = (
+    message: string,
+    type: "success" | "info" | "warning" = "success",
+  ) => {
+    setToast({ visible: true, message, type });
+    setTimeout(() => {
+      setToast((prev) => ({ ...prev, visible: false }));
+    }, 2000);
+  };
+
+  const fetchCourseDetail = async () => {
+    if (!courseId && !slug) return;
+
+    try {
+      setLoading(true);
+      const fetchIdentifier = slug || courseId;
+      const validCourseId = courseId || slug;
+
+      const [courseRes, reviewRes, enrollCheckRes] = await Promise.all([
+        axiosClient.get(`/courses/${fetchIdentifier}`),
+        axiosClient
+          .get(`/reviews/course/${validCourseId}`)
+          .catch(() => ({ data: [] })),
+        axiosClient
+          .get(`/users/enroll/${validCourseId}/check`)
+          .catch(() => ({ data: { isEnrolled: false } })),
+      ]);
+
+      const courseData =
+        courseRes.data?.course || courseRes.data?.data || courseRes.data;
+      const reviewsData =
+        reviewRes.data?.reviews || reviewRes.data?.data || reviewRes.data || [];
+
+      const enrolledStatus =
+        enrollCheckRes.data?.isEnrolled ||
+        enrollCheckRes.data?.enrolled ||
+        enrollCheckRes.data?.data?.isEnrolled ||
+        false;
+
+      setCourse(courseData);
+      setReviews(reviewsData);
+      setIsEnrolled(enrolledStatus);
+    } catch (error: any) {
+      console.error("Fetch course error:", error);
+      Alert.alert(
+        "Lỗi",
+        "Không thể tải chi tiết khóa học. Vui lòng thử lại sau!",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchCourseDetail = async () => {
-      if (!courseId && !slug) return;
-      try {
-        setLoading(true);
-        const fetchIdentifier = slug || courseId;
-        const validCourseId = courseId || slug;
-        const [courseRes, reviewRes, enrollCheckRes] = await Promise.all([
-          axiosClient.get(`/courses/${fetchIdentifier}`),
-          axiosClient
-            .get(`/reviews/course/${validCourseId}`)
-            .catch(() => ({ data: [] })),
-          axiosClient
-            .get(`/users/enroll/${validCourseId}/check`)
-            .catch(() => ({ data: { isEnrolled: false } })),
-        ]);
-
-        const courseData =
-          courseRes.data?.course || courseRes.data?.data || courseRes.data;
-        const reviewsData =
-          reviewRes.data?.reviews ||
-          reviewRes.data?.data ||
-          reviewRes.data ||
-          [];
-        const enrolledStatus =
-          enrollCheckRes.data?.isEnrolled ||
-          enrollCheckRes.data?.enrolled ||
-          enrollCheckRes.data?.data?.isEnrolled ||
-          false;
-
-        setCourse(courseData);
-        setReviews(reviewsData);
-        setIsEnrolled(enrolledStatus);
-      } catch (error: any) {
-        Alert.alert(
-          "Lỗi",
-          "Không thể tải chi tiết khóa học. Vui lòng thử lại sau!",
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchCourseDetail();
   }, [courseId, slug]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isFirstMount.current) {
+        isFirstMount.current = false;
+        return;
+      }
+      fetchCourseDetail();
+    }, []),
+  );
+
+  useEffect(() => {
+    const fetchProgress = async () => {
+      if (!isEnrolled || !course?._id) {
+        setCompletedLessonIds([]);
+        return;
+      }
+
+      try {
+        const res = await getCourseProgress(course._id);
+        if (res.success) {
+          const normalizedIds = (res.data || []).map((item: any) =>
+            typeof item.lesson === "string" ? item.lesson : item.lesson?._id,
+          );
+          setCompletedLessonIds(normalizedIds.filter(Boolean));
+        }
+      } catch (error) {
+        console.error("Fetch course progress error:", error);
+      }
+    };
+
+    fetchProgress();
+  }, [isEnrolled, course?._id]);
+
+  useEffect(() => {
+    if (!course?._id) {
+      setCourseInComboWarning(null);
+      return;
+    }
+
+    const matchedCombo = cart.find((item: any) => {
+      if (!item?.isCombo || !Array.isArray(item.courses)) return false;
+
+      return item.courses.some((comboCourse: any) => {
+        const comboCourseId =
+          typeof comboCourse === "string" ? comboCourse : comboCourse?._id;
+        return comboCourseId === course._id;
+      });
+    });
+
+    if (matchedCombo) {
+      const comboTitle = matchedCombo.title || "một Combo";
+      setCourseInComboWarning(
+        `Khóa học này đã nằm trong "${comboTitle}" ở giỏ hàng.`,
+      );
+      return;
+    }
+
+    setCourseInComboWarning(null);
+  }, [cart, course?._id]);
+
+  const handleBuyNow = async () => {
+    if (!course) return;
+
+    if (isEnrolled) {
+      Alert.alert("Đã sở hữu", "Bé đã có khóa học này rồi!");
+      return;
+    }
+
+    Alert.alert(
+      "Xác nhận thanh toán",
+      `Bạn muốn mua khóa học "${course.title}" với giá ${course.price?.toLocaleString("vi-VN")} đ?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Đồng ý",
+          onPress: async () => {
+            try {
+              setIsProcessingPayment(true);
+
+              const paymentData = await createPayment({
+                itemType: "course",
+                itemId: course._id,
+              });
+
+              if (paymentData.success && paymentData.paymentUrl) {
+                navigation.navigate("PaymentWebview", {
+                  paymentUrl: paymentData.paymentUrl,
+                  txnRef: paymentData.txnRef,
+                  courseId: course._id,
+                });
+              } else {
+                Alert.alert(
+                  "Lỗi",
+                  "Không thể tạo thanh toán. Vui lòng thử lại!",
+                );
+              }
+            } catch (error: any) {
+              console.error("Payment error:", error);
+              Alert.alert(
+                "Lỗi thanh toán",
+                error.response?.data?.message ||
+                  "Không thể tạo thanh toán. Vui lòng thử lại!",
+              );
+            } finally {
+              setIsProcessingPayment(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handlePressLesson = (lesson: any) => {
     const isFreeOrTrial = lesson.isTrial || lesson.isFree || false;
     if (isEnrolled || isFreeOrTrial) {
       navigation.navigate("Learning", {
         courseTitle: course?.title,
+        courseId: course?._id,
         sections: course?.sections,
         initialLesson: lesson,
+        isEnrolled: isEnrolled, // Thêm dòng này
       });
-    } else {
-      Alert.alert(
-        "Khóa học bị khóa",
-        "Bé hãy nhờ bố mẹ mua khóa học để xem bài này nhé! 🔒",
-      );
+      return;
     }
+    Alert.alert(
+      "Khóa học bị khóa",
+      "Bé hãy nhờ bố mẹ mua khóa học để xem bài này nhé! 🔒",
+    );
   };
 
   const handleToggleWishlist = () => {
     if (!course) return;
     toggleWishlist(course);
     if (!isLiked)
-      Alert.alert("Yêu thích 💖", "Đã thêm khóa học vào danh sách Yêu thích!");
+      showToast("Đã thêm khóa học vào danh sách Yêu thích!", "success");
+    else showToast("Đã bỏ khỏi danh sách Yêu thích", "info");
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!course) return;
+
     if (isEnrolled) {
       Alert.alert(
         "Đã sở hữu",
@@ -109,6 +285,23 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       );
       return;
     }
+
+    if (isCourseInCombo) {
+      Alert.alert(
+        "Không thể thêm vào giỏ",
+        courseInComboWarning ||
+          "Khóa học này đã có trong một Combo ở giỏ hàng.",
+        [
+          { text: "Ở lại", style: "cancel" },
+          {
+            text: "Đi đến Giỏ hàng",
+            onPress: () => navigation.navigate("Cart"),
+          },
+        ],
+      );
+      return;
+    }
+
     if (alreadyInCart) {
       Alert.alert("Giỏ hàng", "Khóa học này đã có trong giỏ hàng rồi nhé!", [
         { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
@@ -116,7 +309,9 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       ]);
       return;
     }
+
     addToCart(course);
+
     Alert.alert(
       "Thành công! 🛒",
       "Đã thêm khóa học vào Giỏ hàng của phụ huynh!",
@@ -125,6 +320,41 @@ export default function CourseDetailScreen({ route, navigation }: any) {
         { text: "Đi đến Giỏ hàng", onPress: () => navigation.navigate("Cart") },
       ],
     );
+  };
+
+  const handleSubmitReview = async () => {
+    if (!comment.trim()) {
+      Alert.alert("Lỗi", "Vui lòng nhập nội dung đánh giá!");
+      return;
+    }
+
+    try {
+      setIsSubmittingReview(true);
+      await axiosClient.post("/reviews", {
+        courseId: course._id,
+        rating,
+        comment,
+      });
+
+      showToast("Cảm ơn bạn đã đánh giá!", "success");
+      setIsReviewModalVisible(false);
+      setComment("");
+      setRating(5);
+
+      fetchCourseDetail();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message;
+      if (errorMsg && errorMsg.includes("đã đánh giá")) {
+        Alert.alert("Thông báo", "Bạn đã đánh giá khóa học này rồi!");
+      } else {
+        Alert.alert(
+          "Lỗi",
+          "Không thể gửi đánh giá lúc này. Vui lòng thử lại sau.",
+        );
+      }
+    } finally {
+      setIsSubmittingReview(false);
+    }
   };
 
   const renderCurriculum = () => {
@@ -143,6 +373,8 @@ export default function CourseDetailScreen({ route, navigation }: any) {
               (section.lessonsId || section.lessons).map(
                 (lesson: any, lIndex: number) => {
                   const canPlay = isEnrolled || lesson.isTrial || lesson.isFree;
+                  const isCompleted = completedLessonIds.includes(lesson._id);
+
                   return (
                     <TouchableOpacity
                       key={lesson._id || lIndex}
@@ -157,9 +389,21 @@ export default function CourseDetailScreen({ route, navigation }: any) {
                           ]}
                         >
                           <Ionicons
-                            name={canPlay ? "play" : "lock-closed"}
+                            name={
+                              isCompleted
+                                ? "checkmark"
+                                : canPlay
+                                  ? "play"
+                                  : "lock-closed"
+                            }
                             size={16}
-                            color={canPlay ? "#00B894" : "#B2BEC3"}
+                            color={
+                              isCompleted
+                                ? "#00B894"
+                                : canPlay
+                                  ? "#00B894"
+                                  : "#B2BEC3"
+                            }
                           />
                         </View>
                         <Text
@@ -219,31 +463,44 @@ export default function CourseDetailScreen({ route, navigation }: any) {
   };
 
   const renderReviews = () => {
-    if (reviews.length === 0)
-      return (
-        <Text style={styles.emptyText}>
-          Chưa có đánh giá nào cho khóa học này.
-        </Text>
-      );
     return (
       <View style={styles.tabContent}>
-        {reviews.map((review: any, index: number) => (
-          <View key={review._id || index} style={styles.reviewCard}>
-            <View style={styles.reviewHeader}>
-              <Text style={styles.reviewUser}>
-                {review.user?.fullname || "Phụ huynh"}
-              </Text>
-              <View style={styles.starsRow}>
-                {[...Array(review.rating || 5)].map((_, i) => (
-                  <Ionicons key={i} name="star" size={14} color="#FFA000" />
-                ))}
+        <View style={styles.reviewTabHeader}>
+          <Text style={styles.sectionTitle}>Đánh giá từ học viên</Text>
+          {isEnrolled && (
+            <TouchableOpacity
+              style={styles.writeReviewBtn}
+              onPress={() => setIsReviewModalVisible(true)}
+            >
+              <Ionicons name="pencil" size={16} color="#FFF" />
+              <Text style={styles.writeReviewText}>Viết đánh giá</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {reviews.length === 0 ? (
+          <Text style={styles.emptyText}>
+            Chưa có đánh giá nào cho khóa học này.
+          </Text>
+        ) : (
+          reviews.map((review: any, index: number) => (
+            <View key={review._id || index} style={styles.reviewCard}>
+              <View style={styles.reviewHeader}>
+                <Text style={styles.reviewUser}>
+                  {review.user?.fullname || "Phụ huynh"}
+                </Text>
+                <View style={styles.starsRow}>
+                  {[...Array(review.rating || 5)].map((_, i) => (
+                    <Ionicons key={i} name="star" size={14} color="#FFA000" />
+                  ))}
+                </View>
               </View>
+              <Text style={styles.reviewComment}>
+                {review.comment || review.content}
+              </Text>
             </View>
-            <Text style={styles.reviewComment}>
-              {review.comment || review.content}
-            </Text>
-          </View>
-        ))}
+          ))
+        )}
       </View>
     );
   };
@@ -257,7 +514,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
         </Text>
       </View>
     );
-
   if (!course)
     return (
       <View style={styles.loadingContainer}>
@@ -280,18 +536,27 @@ export default function CourseDetailScreen({ route, navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F5F6F8" />
+      <View style={styles.bgStrokeOne} />
+      <View style={styles.bgStrokeTwo} />
+
+      <CustomToast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+      />
+
       <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
         <View style={styles.headerImageContainer}>
           <Image
             source={{
               uri:
                 course.thumbnail ||
-                "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400",
+                "https://placehold.co/800x600/FFE082/D84315?text=ArtKids+Course",
             }}
             style={styles.thumbnail}
           />
           <SafeAreaView style={styles.floatingHeader}>
-            {/* CỤM NÚT TRÁI (Nút Quay lại) */}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => navigation.goBack()}
@@ -299,7 +564,6 @@ export default function CourseDetailScreen({ route, navigation }: any) {
               <Ionicons name="chevron-back" size={24} color="#37474F" />
             </TouchableOpacity>
 
-            {/* CỤM NÚT PHẢI (Menu + Trái tim) */}
             <View style={{ flexDirection: "row" }}>
               <TouchableOpacity
                 style={[styles.iconButton, { marginRight: 10 }]}
@@ -328,11 +592,13 @@ export default function CourseDetailScreen({ route, navigation }: any) {
             <View style={styles.ratingBadge}>
               <Ionicons name="star" size={16} color="#FFA000" />
               <Text style={styles.ratingText}>
-                {course.averageRating || "5.0"} ({course.numOfReviews || 0})
+                {course.averageRating || "0"} ({course.numOfReviews || 0})
               </Text>
             </View>
             <Text style={styles.price}>
-              {course.price === 0 ? "Miễn phí" : `$${course.price}`}
+              {course.price === 0
+                ? "Miễn phí"
+                : `${course.price?.toLocaleString("vi-VN")} đ`}
             </Text>
           </View>
         </View>
@@ -396,55 +662,172 @@ export default function CourseDetailScreen({ route, navigation }: any) {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={[
-            styles.buyButton,
-            isEnrolled && { backgroundColor: "#0984E3", marginRight: 0 },
-          ]}
-          onPress={
-            isEnrolled
-              ? () =>
-                  navigation.navigate("Learning", {
-                    courseTitle: course?.title,
-                    sections: course?.sections,
-                  })
-              : handleAddToCart
-          }
-        >
-          <Text style={styles.buyButtonText}>
-            {isEnrolled ? "Vào học ngay 🚀" : "Mua Khóa Học"}
-          </Text>
-        </TouchableOpacity>
         {!isEnrolled && (
+          <>
+            {isCourseInCombo && courseInComboWarning && (
+              <View style={styles.warningBanner}>
+                <Ionicons name="information-circle" size={20} color="#FF9800" />
+                <Text style={styles.warningBannerText} numberOfLines={2}>
+                  {courseInComboWarning}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[
+                  styles.secondaryButton,
+                  isCourseInCombo && styles.disabledButton,
+                ]}
+                onPress={handleAddToCart}
+                disabled={isCourseInCombo || isProcessingPayment}
+              >
+                <Ionicons
+                  name="cart-outline"
+                  size={18}
+                  color={isCourseInCombo ? "#B0BEC5" : "#FF8A80"}
+                />
+                <Text
+                  style={[
+                    styles.secondaryButtonText,
+                    isCourseInCombo && styles.disabledButtonText,
+                  ]}
+                >
+                  {isCourseInCombo ? "Đã có trong Combo" : "Thêm vào giỏ"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.primaryButton,
+                  isProcessingPayment && { opacity: 0.7 },
+                ]}
+                onPress={handleBuyNow}
+                disabled={isProcessingPayment}
+              >
+                {isProcessingPayment ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Mua ngay</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+        {isEnrolled && (
           <TouchableOpacity
-            style={[
-              styles.cartIconButton,
-              alreadyInCart && {
-                backgroundColor: "#E8F5E9",
-                borderColor: "#4CD137",
-              },
-            ]}
-            onPress={handleAddToCart}
+            style={styles.enrolledButton}
+            onPress={() =>
+              navigation.navigate("Learning", {
+                courseTitle: course?.title,
+                courseId: course?._id,
+                sections: course?.sections,
+                isEnrolled: true, // Chắc chắn là true nếu ở trong block này
+              })
+            }
           >
-            <Ionicons
-              name={alreadyInCart ? "cart" : "cart-outline"}
-              size={28}
-              color={alreadyInCart ? "#4CD137" : "#FF8A80"}
-            />
+            <Text style={styles.primaryButtonText}>Vào học ngay 🚀</Text>
           </TouchableOpacity>
         )}
       </View>
+
+      {/* --- MODAL VIẾT ĐÁNH GIÁ --- */}
+      <Modal
+        visible={isReviewModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsReviewModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Viết đánh giá</Text>
+              <TouchableOpacity onPress={() => setIsReviewModalVisible(false)}>
+                <Ionicons name="close" size={28} color="#37474F" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubTitle}>
+              Bạn thấy khóa học này thế nào?
+            </Text>
+
+            <View style={styles.ratingSelectRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity key={star} onPress={() => setRating(star)}>
+                  <Ionicons
+                    name={star <= rating ? "star" : "star-outline"}
+                    size={40}
+                    color="#FFA000"
+                    style={{ marginHorizontal: 5 }}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Chia sẻ cảm nhận của bạn về khóa học..."
+              placeholderTextColor="#90A4AE"
+              multiline
+              numberOfLines={4}
+              value={comment}
+              onChangeText={setComment}
+            />
+
+            <TouchableOpacity
+              style={[
+                styles.submitReviewBtn,
+                isSubmittingReview && { opacity: 0.7 },
+              ]}
+              onPress={handleSubmitReview}
+              disabled={isSubmittingReview}
+            >
+              {isSubmittingReview ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.submitReviewText}>Gửi Đánh Giá</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FDFBF7" },
+  container: { flex: 1, backgroundColor: "#F5F6F8" },
+  bgStrokeOne: {
+    position: "absolute",
+    width: 240,
+    height: 90,
+    borderRadius: 30,
+    backgroundColor: "#FFE9A9",
+    right: -72,
+    top: 88,
+    transform: [{ rotate: "-15deg" }],
+    opacity: 0.68,
+  },
+  bgStrokeTwo: {
+    position: "absolute",
+    width: 180,
+    height: 76,
+    borderRadius: 25,
+    backgroundColor: "#B3E5FC",
+    right: 18,
+    top: 146,
+    transform: [{ rotate: "14deg" }],
+    opacity: 0.55,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FDFBF7",
+    backgroundColor: "#F5F6F8",
   },
   emptyText: {
     fontSize: 15,
@@ -453,12 +836,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 20,
   },
-  headerImageContainer: { position: "relative", width: "100%", height: 280 },
+  headerImageContainer: { position: "relative", width: "100%", height: 300 },
   thumbnail: {
     width: "100%",
     height: "100%",
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
   },
   floatingHeader: {
     position: "absolute",
@@ -466,23 +849,38 @@ const styles = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingHorizontal: 18,
+    paddingTop: 12,
   },
   iconButton: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 20,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: "#E7ECF3",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowColor: "#C9D3DF",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
     elevation: 3,
   },
-  mainInfo: { padding: 20, marginTop: -15 },
+  mainInfo: {
+    padding: 18,
+    marginHorizontal: 14,
+    marginTop: -28,
+    borderRadius: 24,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E8EDF3",
+    shadowColor: "#D5DEE8",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   title: { fontSize: 24, fontWeight: "900", color: "#37474F", marginBottom: 8 },
   description: {
     fontSize: 14,
@@ -498,10 +896,12 @@ const styles = StyleSheet.create({
   ratingBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFF9C4",
+    backgroundColor: "#FFF4CF",
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 15,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F7E2A5",
   },
   ratingText: {
     fontSize: 14,
@@ -509,20 +909,37 @@ const styles = StyleSheet.create({
     color: "#FFA000",
     marginLeft: 5,
   },
-  price: { fontSize: 24, fontWeight: "900", color: "#FF8A80" },
-  tabBar: { flexDirection: "row", paddingHorizontal: 20, marginBottom: 10 },
+  price: { fontSize: 24, fontWeight: "900", color: "#FB8C00" },
+  tabBar: {
+    flexDirection: "row",
+    marginHorizontal: 14,
+    marginTop: 14,
+    marginBottom: 8,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E8EDF3",
+  },
   tabButton: {
     paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginRight: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    marginRight: 8,
   },
-  tabButtonActive: { backgroundColor: "#FFF9C4" },
-  tabText: { fontSize: 15, fontWeight: "bold", color: "#B0BEC5" },
-  tabTextActive: { color: "#FFA000" },
-  contentArea: { paddingHorizontal: 20, paddingBottom: 100 },
+  tabButtonActive: { backgroundColor: "#FFF0D2" },
+  tabText: { fontSize: 14, fontWeight: "bold", color: "#94A3B8" },
+  tabTextActive: { color: "#F59E0B" },
+  contentArea: { paddingHorizontal: 14, paddingBottom: 106 },
   tabContent: { marginTop: 10 },
-  sectionBlock: { marginBottom: 20 },
+  sectionBlock: {
+    marginBottom: 18,
+    backgroundColor: "#FFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E8EDF3",
+    padding: 14,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "bold",
@@ -533,15 +950,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#FFF",
+    backgroundColor: "#FDFEFF",
     padding: 12,
-    borderRadius: 15,
+    borderRadius: 14,
     marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#E8EDF3",
   },
   lessonLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
   iconBox: {
@@ -561,7 +975,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#FFF",
     padding: 15,
-    borderRadius: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E8EDF3",
     marginBottom: 15,
   },
   instructorAvatar: {
@@ -575,16 +991,39 @@ const styles = StyleSheet.create({
   instructorName: { fontSize: 18, fontWeight: "bold", color: "#37474F" },
   instructorRole: {
     fontSize: 14,
-    color: "#FF8A80",
+    color: "#F59E0B",
     marginTop: 4,
     fontWeight: "bold",
   },
   instructorBio: { fontSize: 14, color: "#78909C", lineHeight: 22 },
+
+  reviewTabHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  writeReviewBtn: {
+    flexDirection: "row",
+    backgroundColor: "#00B894",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    alignItems: "center",
+  },
+  writeReviewText: {
+    color: "#FFF",
+    fontWeight: "bold",
+    fontSize: 13,
+    marginLeft: 5,
+  },
   reviewCard: {
     backgroundColor: "#FFF",
     padding: 15,
     borderRadius: 15,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E8EDF3",
   },
   reviewHeader: {
     flexDirection: "row",
@@ -595,40 +1034,126 @@ const styles = StyleSheet.create({
   reviewUser: { fontSize: 15, fontWeight: "bold", color: "#37474F" },
   starsRow: { flexDirection: "row" },
   reviewComment: { fontSize: 14, color: "#78909C", lineHeight: 20 },
+
   bottomBar: {
     position: "absolute",
     bottom: 0,
     width: "100%",
     backgroundColor: "#FFF",
     padding: 20,
-    paddingBottom: 30,
+    paddingBottom: 24,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    flexDirection: "row",
-    shadowColor: "#000",
+    borderTopWidth: 1,
+    borderTopColor: "#E8EDF3",
+    shadowColor: "#D4DCE6",
     shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.16,
     shadowRadius: 10,
     elevation: 10,
   },
-  cartIconButton: {
-    width: 56,
-    height: 56,
-    justifyContent: "center",
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    borderRadius: 15,
-    borderWidth: 2,
-    borderColor: "#FF8A80",
-    backgroundColor: "#FFF",
-    marginLeft: 15,
+    width: "100%",
+    gap: 10,
   },
-  buyButton: {
+  secondaryButton: {
     flex: 1,
-    backgroundColor: "#FF8A80",
-    paddingVertical: 16,
-    borderRadius: 25,
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#FFF",
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: "#FBBF24",
+    gap: 6,
+  },
+  secondaryButtonText: { color: "#D97706", fontSize: 14, fontWeight: "700" },
+  primaryButton: {
+    flex: 2,
+    backgroundColor: "#FFB300",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryButtonText: { color: "#2F3A43", fontSize: 15, fontWeight: "900" },
+  enrolledButton: {
+    backgroundColor: "#4DB6AC",
+    padding: 16,
+    borderRadius: 25,
+    alignItems: "center",
+    width: "100%",
+  },
+  warningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E0",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginBottom: 10,
+    gap: 8,
+  },
+  warningBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#F57C00",
+  },
+  disabledButton: { backgroundColor: "#F5F5F5", borderColor: "#E0E0E0" },
+  disabledButtonText: { color: "#B0BEC5" },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 25,
+    minHeight: 350,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "900", color: "#37474F" },
+  modalSubTitle: {
+    fontSize: 15,
+    color: "#78909C",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  ratingSelectRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginBottom: 25,
+  },
+  reviewInput: {
+    backgroundColor: "#F5F6FA",
+    borderRadius: 15,
+    padding: 15,
+    fontSize: 15,
+    color: "#2D3436",
+    textAlignVertical: "top",
+    minHeight: 100,
+    marginBottom: 20,
+  },
+  submitReviewBtn: {
+    backgroundColor: "#FFB300",
+    borderRadius: 25,
+    paddingVertical: 16,
     alignItems: "center",
   },
-  buyButtonText: { color: "#FFF", fontSize: 18, fontWeight: "900" },
+  submitReviewText: { color: "#2F3A43", fontSize: 16, fontWeight: "bold" },
 });

@@ -12,8 +12,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useShopStore } from "../../store/useShopStore";
-import axiosClient from "../../api/axiosClient";
-import CustomHeader from "../../components/CustomHeader"; // <-- IMPORT HEADER MỚI
+import { createPayment, checkoutCart } from "../../api/paymentService";
+import CustomHeader from "../../components/CustomHeader";
+import { syncCartToBackend } from "../../api/paymentService";
 
 export default function CartScreen({ navigation }: any) {
   const cartItems = useShopStore((state) => state.cart);
@@ -31,7 +32,14 @@ export default function CartScreen({ navigation }: any) {
   const handleRemoveItem = (id: string) => {
     Alert.alert("Xóa khóa học", "Bạn có muốn bỏ khóa học này khỏi giỏ không?", [
       { text: "Hủy", style: "cancel" },
-      { text: "Xóa", style: "destructive", onPress: () => removeFromCart(id) },
+      {
+        text: "Xóa",
+        style: "destructive",
+        onPress: () => {
+          // ✅ Just call removeFromCart, don't await
+          removeFromCart(id);
+        },
+      },
     ]);
   };
 
@@ -41,49 +49,136 @@ export default function CartScreen({ navigation }: any) {
     setCoupon("");
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cartItems.length === 0) {
       Alert.alert("Giỏ hàng trống", "Hãy chọn thêm khóa học cho bé nhé!");
       return;
     }
 
+    const itemText =
+      cartItems.length === 1
+        ? "1 khóa học/combo"
+        : `${cartItems.length} khóa học/combo`;
+
     Alert.alert(
       "Xác nhận thanh toán",
-      `Bạn xác nhận đăng ký ${cartItems.length} khóa học với tổng tiền $${totalAmount.toFixed(2)}?`,
+      `Bạn xác nhận thanh toán ${itemText} với tổng tiền ${totalAmount.toLocaleString("vi-VN")} đ?`,
       [
         { text: "Hủy", style: "cancel" },
         {
           text: "Thanh toán ngay",
-          onPress: async () => {
-            try {
-              setIsCheckingOut(true);
-              await Promise.all(
-                cartItems.map((item) =>
-                  axiosClient.post(`/users/enroll/${item._id || item.id}`),
-                ),
-              );
-              clearCart();
-              Alert.alert(
-                "Thanh toán thành công! 🎉",
-                "Các khóa học đã được thêm vào Bàn học của bé.",
-                [{ text: "Tuyệt vời", onPress: () => navigation.popToTop() }],
-              );
-            } catch (error: any) {
-              const errorMsg =
-                error.response?.data?.message ||
-                "Có lỗi xảy ra khi đăng ký khóa học.";
-              Alert.alert("Thanh toán thất bại", errorMsg);
-            } finally {
-              setIsCheckingOut(false);
-            }
-          },
+          onPress: () => proceedCheckout(),
         },
       ],
     );
   };
 
+  const proceedCheckout = async () => {
+    try {
+      setIsCheckingOut(true);
+
+      if (cartItems.length > 0) {
+        console.log("📤 Syncing cart to backend before checkout...");
+        try {
+          await syncCartToBackend(cartItems);
+        } catch (syncError: any) {
+          console.error("❌ Cart sync failed:", syncError);
+          Alert.alert(
+            "Lỗi đồng bộ giỏ hàng",
+            "Không thể đồng bộ giỏ hàng với server. Vui lòng thử lại!",
+          );
+          setIsCheckingOut(false);
+          return;
+        }
+      }
+
+      // ✅ Call checkout API
+      const paymentData = await checkoutCart();
+
+      if (!paymentData.success) {
+        Alert.alert(
+          "Lỗi",
+          paymentData.message || "Không thể tạo thanh toán. Vui lòng thử lại!",
+        );
+        return;
+      }
+
+      // Handle free flow
+      if (paymentData.flow === "free") {
+        clearCart();
+        Alert.alert(
+          "Đăng ký thành công! 🎉",
+          "Tất cả khóa học miễn phí đã được thêm vào Bàn học của bé.",
+          [
+            {
+              text: "Tuyệt vời",
+              onPress: () => {
+                navigation.navigate("DrawerMain", { screen: "MyCourses" });
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      // Handle vnpay flow
+      if (paymentData.flow === "vnpay" && paymentData.paymentUrl) {
+        const cartItemIds = cartItems.map((item) => item._id);
+
+        navigation.navigate("PaymentWebview", {
+          paymentUrl: paymentData.paymentUrl,
+          txnRef: paymentData.txnRef,
+          itemIds: cartItemIds,
+          isFromCart: true,
+          isBulkCheckout: true,
+          itemCount: cartItems.length,
+        });
+        return;
+      }
+
+      Alert.alert("Lỗi", "Phản hồi thanh toán không hợp lệ.");
+    } catch (error: any) {
+      console.error("Checkout error:", error);
+      console.error("Error response:", error.response?.data);
+
+      const errorMsg =
+        error.response?.data?.message ||
+        "Có lỗi xảy ra khi tạo thanh toán. Vui lòng thử lại!";
+      Alert.alert("Thanh toán thất bại", errorMsg);
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
+
+  const handleOpenItemDetail = (item: any) => {
+    const itemId = item?._id || item?.id;
+
+    if (!itemId) {
+      Alert.alert("Lỗi", "Không tìm thấy thông tin sản phẩm để mở chi tiết.");
+      return;
+    }
+
+    if (item.isCombo) {
+      navigation.navigate("ComboDetail", {
+        comboId: itemId,
+        slug: item.slug,
+      });
+      return;
+    }
+
+    navigation.navigate("CourseDetail", {
+      courseId: itemId,
+      slug: item.slug,
+    });
+  };
+
   const renderCartItem = ({ item }: { item: any }) => (
-    <View style={styles.cartItem}>
+    <TouchableOpacity
+      style={styles.cartItem}
+      onPress={() => handleOpenItemDetail(item)}
+      activeOpacity={0.9}
+      disabled={isCheckingOut}
+    >
       <Image
         source={{
           uri:
@@ -96,8 +191,11 @@ export default function CartScreen({ navigation }: any) {
         <Text style={styles.itemTitle} numberOfLines={2}>
           {item.title}
         </Text>
+        {item.isCombo && <Text style={styles.comboLabel}>📦 Combo</Text>}
         <Text style={styles.itemPrice}>
-          {item.price === 0 ? "Miễn phí" : `$${item.price}`}
+          {item.price === 0
+            ? "Miễn phí"
+            : `${item.price.toLocaleString("vi-VN")} đ`}
         </Text>
       </View>
       <View style={styles.actionBox}>
@@ -109,12 +207,11 @@ export default function CartScreen({ navigation }: any) {
           <Ionicons name="trash" size={20} color="#FF8A80" />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
-      {/* THÊM CUSTOM HEADER VÀO ĐÂY */}
       <CustomHeader title="Giỏ hàng" rightIcon="cart-outline" />
 
       <FlatList
@@ -159,7 +256,7 @@ export default function CartScreen({ navigation }: any) {
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Tổng cộng</Text>
                   <Text style={styles.summaryValue}>
-                    ${totalAmount.toFixed(2)}
+                    {totalAmount.toLocaleString("vi-VN")} đ
                   </Text>
                 </View>
               </View>
@@ -213,7 +310,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     color: "#37474F",
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  comboLabel: {
+    fontSize: 12,
+    color: "#FF8A80",
+    fontWeight: "bold",
+    marginBottom: 4,
   },
   itemPrice: { fontSize: 18, fontWeight: "900", color: "#FF8A80" },
   actionBox: { paddingHorizontal: 10 },
