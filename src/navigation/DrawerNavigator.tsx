@@ -16,6 +16,7 @@ import CartScreen from "../screens/Parent/CartScreen";
 import PaymentWebviewScreen from "../screens/Parent/PaymentWebviewScreen";
 import LearningScreen from "../screens/Kids/LearningScreen";
 import EditProfileScreen from "../screens/Kids/EditProfileScreen";
+import ChangePasswordScreen from "../screens/Kids/ChangePasswordScreen";
 import AllCoursesScreen from "../screens/Kids/AllCoursesScreen";
 import AllCombosScreen from "../screens/Kids/AllCombosScreen";
 import WishlistScreen from "../screens/Kids/WishlistScreen";
@@ -35,6 +36,7 @@ function LoggedInStack() {
       <Stack.Screen name="PaymentWebview" component={PaymentWebviewScreen} />
       <Stack.Screen name="Learning" component={LearningScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="AllCourses" component={AllCoursesScreen} />
       <Stack.Screen name="AllCombos" component={AllCombosScreen} />
     </Stack.Navigator>

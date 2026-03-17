@@ -99,7 +99,7 @@ export default function ProfileScreen({ navigation }: any) {
 
           <View style={styles.infoBox}>
             <Text style={styles.fullname}>
-              {profile?.fullname || profile?.name || "Phụ huynh ArtKids"}
+              {profile?.fullname || profile?.name || "Họa sĩ ArtKids"}
             </Text>
             <Text style={styles.email}>
               {profile?.email || "Chưa cập nhật email"}
@@ -169,7 +169,7 @@ export default function ProfileScreen({ navigation }: any) {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => Alert.alert("Tính năng", "Đổi mật khẩu sắp ra mắt!")}
+            onPress={() => navigation.navigate("ChangePassword")}
           >
             <View style={[styles.menuIconBox, { backgroundColor: "#FFE6F3" }]}>
               <Ionicons name="lock-closed-outline" size={21} color="#DB2777" />
