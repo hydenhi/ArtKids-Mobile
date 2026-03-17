@@ -149,7 +149,8 @@ export default function WishlistScreen({ navigation }: any) {
             source={{
               uri:
                 item.thumbnail ||
-                "https://images.unsplash.com/photo-1580582932707-520aed937b7b?q=80&w=400",
+                item?.courses?.[0]?.thumbnail ||
+                "https://placehold.co/200x200/FFE0B2/EF6C00?text=Combo",
             }}
             style={styles.thumbnail}
           />
